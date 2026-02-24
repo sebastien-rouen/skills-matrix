@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skills Matrix - Matrice de compétences</title>
+  <meta name="description" content="Matrice de compétences interactive pour visualiser et gérer les skills d'une équipe." />
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js (for Radar charts) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <!-- Application Styles -->
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/matrix.css" />
+  <link rel="stylesheet" href="css/charts.css" />
+
+  <!-- Favicon (inline SVG) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar Navigation -->
+    <aside class="app__sidebar" id="app-sidebar"></aside>
+
+    <!-- Main Content Area -->
+    <main class="app__main">
+      <div class="app__content">
+        <!-- Matrix View -->
+        <section class="view view--active" id="view-matrix"></section>
+
+        <!-- Dashboard View -->
+        <section class="view" id="view-dashboard"></section>
+
+        <!-- Radar View -->
+        <section class="view" id="view-radar"></section>
+
+        <!-- Import View -->
+        <section class="view" id="view-import"></section>
+
+        <!-- Settings View -->
+        <section class="view" id="view-settings"></section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Application Script (ES modules) -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
