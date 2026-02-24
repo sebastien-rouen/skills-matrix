@@ -43,7 +43,7 @@ python -m http.server 8080     # Python
 | Vue | Description |
 |-----|-------------|
 | 🗂️ **Matrice** | Tableau heatmap membres x competences, edition inline, tri multi-colonnes, badges d'appetence |
-| 📈 **Dashboard** | KPIs de couverture, alertes competences critiques, priorites de formation |
+| 📈 **Dashboard** | KPIs de couverture, alertes competences critiques, priorites de formation, mentorat |
 | 🕸️ **Radar** | Graphique radar par membre, comparaison multi-profils (jusqu'a 5), overlay moyenne equipe |
 | 📥 **Import** | Collage direct depuis Excel/Sheets, upload CSV, donnees de demo en 1 clic |
 | ⚙️ **Parametres** | Seuils de criticite, gestion des categories, delimiteur CSV, export/import JSON complet |
@@ -53,6 +53,129 @@ python -m http.server 8080     # Python
 - 💾 Sauvegarde automatique en `localStorage` a chaque modification
 - 📤 Export CSV simple, CSV detaille et JSON (backup complet)
 - 🏷️ Categories de competences avec auto-categorisation
+- 🔗 URLs partageables (`#dashboard`, `#matrix`, `#radar`, `#import`, `#settings`)
+
+---
+
+## 🖼️ Apercu des vues
+
+### Wizard d'onboarding (empty state)
+
+Lorsqu'aucune donnee n'est chargee, un wizard guide la creation de la premiere matrice :
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  📊  Bienvenue dans Skills Matrix                            │
+│  Creez votre matrice de competences en quelques clics        │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ── Demarrage rapide ──                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                   │
+│  │ 🚀 Start │  │ ☁️ Cloud │  │ ⚖ Mature │                   │
+│  │   -up    │  │  Trans.  │  │  Agence  │                   │
+│  └──────────┘  └──────────┘  └──────────┘                   │
+│                                                              │
+│  ──────────────── ou ────────────────                        │
+│                                                              │
+│  ── Creer votre equipe ──                                    │
+│  Membres  [____________] [+ Ajouter]                         │
+│  ● AD Alice Dupont  ● BM Bob Martin           (x supprimer) │
+│                                                              │
+│  Packs : [Frontend] [Backend] [DevOps] [Data] [Management]  │
+│  ● JavaScript ● React ● Node.js ● Docker      (x supprimer) │
+│  Ajouter [____________] [+ Ajouter]                          │
+│                                                              │
+│  [          🚀 Creer la matrice          ]                   │
+│  2 membres x 4 competences                                   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Matrice heatmap
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Matrice des competences                                     │
+│  [Recherche...] [Categorie ▼] [Role ▼] [Niveau ▼]           │
+├────────────┬──────────┬──────┬──────┬──────┬──────┬──────────┤
+│ Nom      ▲ │ Role     │ JS   │React │Python│Docker│ Moy.     │
+├────────────┼──────────┼──────┼──────┼──────┼──────┼──────────┤
+│ J. Dupont  │ Dev      │ ████ │ ███░ │ █░░░ │ ██░░ │ 2.5      │
+│ M. Martin  │ TL       │ ███░ │ ████ │ ██░░ │ ███░ │ 3.0      │
+│ P. Durand  │ DevOps   │ █░░░ │ ░░░░ │ ██░░ │ ████ │ 1.8      │
+└────────────┴──────────┴──────┴──────┴──────┴──────┴──────────┘
+  Cliquer une cellule ouvre l'edition inline :
+  ┌─────────────────────┐
+  │ Niveau     [0][1][2][3][4] │
+  │ Appetence  [0][1][2][3]    │
+  └─────────────────────┘
+```
+
+### Dashboard
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Dashboard - Vue d'ensemble                                  │
+├──────────┬──────────┬──────────┬──────────────────────────────┤
+│  👥 8    │  🎯 12   │  📊 72%  │  ⚠ 2 critiques              │
+│ Membres  │ Comp.    │ Couvert. │  Alertes                     │
+├──────────┴──────────┴──────────┴──────────────────────────────┤
+│                                                              │
+│  (◔) 85%    (◔) 72%    (◔) 35%    (◔) 58%                   │
+│  Sante     Couvert.  Confirmes+ Appetence                    │
+│                                                              │
+├──────────────────────────┬───────────────────────────────────┤
+│  🔴 Critique             │  Priorites de formation           │
+│  Kubernetes : 0 expert   │  ┌─ URGENTE ─ Kubernetes ────┐   │
+│  Spark : 0 expert        │  │  Candidats: ● AD ● BM     │   │
+│                          │  └────────────────────────────┘   │
+│  🟠 Attention            │  ┌─ MOYENNE ─ Spark ─────────┐   │
+│  Terraform : 1 pers.     │  │  Aucun candidat motive     │   │
+│                          │  └────────────────────────────┘   │
+├──────────────────────────┴───────────────────────────────────┤
+│                                                              │
+│  Developpement & Mentorat                  5 competences     │
+│  ┌───────────────────────────────────────────────────────┐   │
+│  │ JavaScript                                3 candidats │   │
+│  │ ─────────────────────────────────────────────         │   │
+│  │ 🟣 Expert    ● AD Alice D.                            │   │
+│  │ 🟢 Confirme  ● BM Bob M.  ● CD Charlie D.            │   │
+│  │       →                                               │   │
+│  │ 🩷 Motive    ● EF Emma F.  ● GH Guy H.  ● IJ Ines J.│   │
+│  │                                                       │   │
+│  │ Niveau    ████████░░░░  2.1                           │   │
+│  │ Appetence █████████████ 2.8                           │   │
+│  └───────────────────────────────────────────────────────┘   │
+│  ┌───────────────────────────────────────────────────────┐   │
+│  │ Docker                                    2 candidats │   │
+│  │ ─────────────────────────────────────────────         │   │
+│  │ 🩷 Motive    ● AD Alice D.  ● BM Bob M.              │   │
+│  │ Aucun mentor interne — formation externe recommandee  │   │
+│  │                                                       │   │
+│  │ Niveau    █████░░░░░░░  1.5                           │   │
+│  │ Appetence ██████████░░  2.3                           │   │
+│  └───────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Radar comparatif
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Profil Radar                                                │
+│  ● J. Dupont  ● M. Martin  ○ P. Durand  ○ Moyenne           │
+├──────────────────────────────┬───────────────────────────────┤
+│                              │  Jean Dupont                  │
+│         JavaScript           │  Role: Developpeur            │
+│            4                 │                               │
+│           ╱ ╲                │  JavaScript  ████  4          │
+│    Docker╱   ╲React          │  React       ███░  3          │
+│     2  ╱  ╲╱  ╲ 3           │  Python      █░░░  1          │
+│        ╲      ╱              │  Docker      ██░░  2          │
+│         ╲  ╱╲╱               │                               │
+│    Python╲╱                  │  Appetence moy. : 2.1         │
+│           1                  │                               │
+└──────────────────────────────┴───────────────────────────────┘
+```
 
 ---
 
@@ -94,7 +217,7 @@ skills-matrix/
 │   ├── matrix.css            # Heatmap et edition inline
 │   └── charts.css            # Dashboard et graphiques
 └── js/
-    ├── app.js                # Init, routing entre vues
+    ├── app.js                # Init, routing hash (#view), popstate
     ├── state.js              # Store centralise (pattern pub/sub)
     ├── models/data.js        # Modele de donnees, validation, stats
     ├── services/
@@ -109,7 +232,8 @@ skills-matrix/
     │   ├── import.js         # Vue import de donnees
     │   └── settings.js       # Vue parametres
     ├── components/
-    │   ├── sidebar.js        # Navigation laterale
+    │   ├── sidebar.js        # Navigation laterale (routing hash)
+    │   ├── onboarding.js     # Wizard d'onboarding (empty state)
     │   ├── filters.js        # Barre de filtres
     │   ├── modal.js          # Dialogues modaux
     │   └── toast.js          # Notifications toast
