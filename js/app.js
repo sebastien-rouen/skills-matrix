@@ -25,6 +25,15 @@ const VIEW_RENDERERS = {
 let currentView = 'matrix';
 
 /**
+ * Read the view ID from the current URL hash.
+ * @returns {string|null} Valid view ID or null
+ */
+function getViewFromHash() {
+  const hash = location.hash.replace('#', '');
+  return VIEW_RENDERERS[hash] ? hash : null;
+}
+
+/**
  * Initialize the application.
  * Sets up state, renders the initial UI, and subscribes to events.
  */
@@ -54,13 +63,24 @@ function init() {
     renderCurrentView();
   });
 
-  // Initial render - check if data exists, show import if empty
+  // Handle browser back/forward navigation
+  window.addEventListener('popstate', () => {
+    const viewId = getViewFromHash();
+    if (viewId && viewId !== currentView) {
+      navigateTo(viewId);
+    }
+  });
+
+  // Determine initial view: URL hash > data check > default
+  const hashView = getViewFromHash();
   const state = getState();
-  if (state.members.length === 0) {
-    currentView = 'import';
+
+  if (hashView) {
+    navigateTo(hashView);
+  } else if (state.members.length === 0) {
     navigateTo('import');
   } else {
-    renderCurrentView();
+    navigateTo('matrix');
   }
 }
 

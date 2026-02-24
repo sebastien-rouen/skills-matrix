@@ -36,9 +36,8 @@ export function renderSidebar(container) {
         <div class="sidebar__section-label">Vues</div>
         ${NAV_ITEMS.map(item => `
           <a class="sidebar__link ${item.id === activeView ? 'sidebar__link--active' : ''}"
-             data-view="${item.id}"
-             role="button"
-             tabindex="0">
+             href="#${item.id}"
+             data-view="${item.id}">
             <span class="sidebar__link-icon">${item.icon}</span>
             <span>${item.label}</span>
           </a>
@@ -62,18 +61,11 @@ function bindEvents(container) {
   const links = container.querySelectorAll('.sidebar__link');
 
   links.forEach(link => {
-    link.addEventListener('click', () => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
       const viewId = link.dataset.view;
       if (viewId && viewId !== activeView) {
         navigateTo(viewId);
-      }
-    });
-
-    // Keyboard accessibility
-    link.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        link.click();
       }
     });
   });
@@ -85,6 +77,8 @@ function bindEvents(container) {
  */
 export function navigateTo(viewId) {
   activeView = viewId;
+  // Update URL hash without triggering hashchange (we push silently)
+  history.pushState(null, '', '#' + viewId);
   emit('view:changed', viewId);
   updateActiveLink();
 }
