@@ -12,6 +12,7 @@ import {
   SKILL_LEVELS, APPETENCE_LEVELS, downloadFile,
 } from '../utils/helpers.js';
 import { exportCSV, exportDetailedCSV } from '../services/exporter.js';
+import { renderOnboarding } from '../components/onboarding.js';
 
 /** @type {Object|null} Current sort configuration */
 let sortConfig = { key: null, ascending: true };
@@ -84,20 +85,7 @@ export function renderMatrixView(container) {
  * @param {HTMLElement} container - The view container element
  */
 function renderEmptyState(container) {
-  container.innerHTML = `
-    <div class="empty-state">
-      <div class="empty-state__icon">📊</div>
-      <h3 class="empty-state__title">Aucune donnée</h3>
-      <p class="empty-state__description">
-        Commencez par importer des données depuis l'onglet Import pour voir la matrice de compétences.
-      </p>
-      <button class="btn btn--primary" id="goto-import-btn">Aller à l'import</button>
-    </div>
-  `;
-
-  container.querySelector('#goto-import-btn')?.addEventListener('click', () => {
-    import('../state.js').then(m => m.emit('view:changed', 'import'));
-  });
+  renderOnboarding(container);
 }
 
 /**
@@ -123,7 +111,7 @@ function renderTable(members, groupedSkills, state) {
   const catEntries = Object.entries(groupedSkills);
   if (catEntries.length > 1 || (catEntries.length === 1 && catEntries[0][0] !== 'Autres')) {
     html += '<thead><tr class="category-row">';
-    html += '<th></th><th></th><th></th>';
+    html += '<th></th><th></th>';
     for (const [catName, skills] of catEntries) {
       html += `<th colspan="${skills.length}" style="text-align: center;">${escapeHtml(catName)}</th>`;
     }
@@ -142,11 +130,6 @@ function renderTable(members, groupedSkills, state) {
   html += `<th>
     <span class="sort-header" data-sort="role" style="cursor: pointer;">
       Ownership ${getSortIndicator('role')}
-    </span>
-  </th>`;
-  html += `<th>
-    <span class="sort-header" data-sort="appetences" style="cursor: pointer;">
-      Appétences ${getSortIndicator('appetences')}
     </span>
   </th>`;
 
@@ -188,15 +171,6 @@ function renderTable(members, groupedSkills, state) {
         }
       </div>
     </td>`;
-    html += `<td>
-      <div class="editable-cell editable-cell--chips" data-member-id="${member.id}" data-field="appetences">
-        ${member.appetences
-          ? member.appetences.split(',').map(a => a.trim()).filter(Boolean).map(a => `<span class="cell-chip cell-chip--appetence">${escapeHtml(a)}</span>`).join('')
-          : '<span class="cell-chip cell-chip--empty">-</span>'
-        }
-      </div>
-    </td>`;
-
     for (const skill of flatSkills) {
       const entry = member.skills[skill];
       const level = entry?.level ?? 0;
@@ -267,9 +241,6 @@ function applySorting(members, config) {
     } else if (config.key === 'role') {
       va = a.role.toLowerCase();
       vb = b.role.toLowerCase();
-    } else if (config.key === 'appetences') {
-      va = a.appetences.toLowerCase();
-      vb = b.appetences.toLowerCase();
     } else if (config.key.startsWith('skill:')) {
       const skillName = config.key.slice(6);
       va = a.skills[skillName]?.level ?? 0;
@@ -331,8 +302,6 @@ function bindMatrixEvents(container, state) {
         openNameEditor(cell, memberId, container);
       } else if (field === 'role') {
         openChipEditor(cell, memberId, 'role', state, container);
-      } else if (field === 'appetences') {
-        openChipEditor(cell, memberId, 'appetences', state, container);
       }
     });
   });
@@ -518,7 +487,7 @@ function openChipEditor(cell, memberId, field, state, viewContainer) {
     .map(v => v.trim())
     .filter(Boolean);
 
-  // Collect all known values across members for suggestions (same field)
+  // Collect all known values across members for suggestions
   const allValues = new Set();
   for (const m of state.members) {
     (m[field] || '').split(',').forEach(v => {
@@ -529,25 +498,12 @@ function openChipEditor(cell, memberId, field, state, viewContainer) {
   // Suggestions = all known values not already selected
   const suggestions = [...allValues].sort((a, b) => a.localeCompare(b, 'fr'));
 
-  // Cross-field suggestions: when editing role, suggest appetences and vice versa
-  const crossField = field === 'role' ? 'appetences' : 'role';
-  const crossValues = new Set();
-  for (const m of state.members) {
-    (m[crossField] || '').split(',').forEach(v => {
-      const trimmed = v.trim();
-      if (trimmed && !allValues.has(trimmed)) crossValues.add(trimmed);
-    });
-  }
-  const crossSuggestions = [...crossValues].sort((a, b) => a.localeCompare(b, 'fr'));
-  const crossLabel = field === 'role' ? 'Depuis appétences' : 'Depuis ownership';
-
   const editor = document.createElement('div');
   editor.className = 'inline-edit inline-edit--chips';
 
   const label = field === 'role' ? 'Ownership' : 'Appétences';
 
   const renderEditorContent = () => {
-    const filteredCross = crossSuggestions.filter(s => !currentValues.includes(s));
     editor.innerHTML = `
       <div class="inline-edit__label">${label}</div>
       <div class="inline-edit__chip-list">
@@ -565,16 +521,6 @@ function openChipEditor(cell, memberId, field, state, viewContainer) {
           </span>
         `).join('') || '<span style="font-size: 11px; color: var(--color-text-secondary);">-</span>'}
       </div>
-      ${filteredCross.length > 0 ? `
-        <div class="inline-edit__label inline-edit__label--cross" style="margin-top: 6px;">${crossLabel}</div>
-        <div class="inline-edit__chip-list">
-          ${filteredCross.map(s => `
-            <span class="inline-edit__chip inline-edit__chip--cross" data-value="${escapeHtml(s)}">
-              ↔ ${escapeHtml(s)}
-            </span>
-          `).join('')}
-        </div>
-      ` : ''}
       <div style="margin-top: 6px; display: flex; gap: 4px;">
         <input type="text" class="inline-edit__input" placeholder="Ajouter..." style="flex: 1;" />
         <button class="inline-edit__add-btn" title="Ajouter">+</button>
@@ -606,18 +552,6 @@ function openChipEditor(cell, memberId, field, state, viewContainer) {
         e.stopPropagation();
         const val = chip.dataset.value;
         if (!currentValues.includes(val)) currentValues.push(val);
-        commitField();
-        renderEditorContent();
-      });
-    });
-
-    // Add cross-field suggestion chip (from appetences/ownership)
-    editor.querySelectorAll('.inline-edit__chip--cross').forEach(chip => {
-      chip.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const val = chip.dataset.value;
-        if (!currentValues.includes(val)) currentValues.push(val);
-        if (!allValues.has(val)) allValues.add(val);
         commitField();
         renderEditorContent();
       });

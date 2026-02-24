@@ -363,22 +363,6 @@
   border-color: var(--color-primary-300);
 }
 
-.inline-edit__chip--cross {
-  background: #FDF4FF;
-  color: #7C3AED;
-  border: 1px dashed #C4B5FD;
-}
-
-.inline-edit__chip--cross:hover {
-  background: #EDE9FE;
-  color: #6D28D9;
-  border-color: #8B5CF6;
-}
-
-.inline-edit__label--cross {
-  color: #7C3AED;
-}
-
 .inline-edit__chip-remove {
   font-size: 14px;
   line-height: 1;

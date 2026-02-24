@@ -1349,13 +1349,34 @@
   transform: translateY(-1px);
 }
 
+.mentoring-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .mentoring-card__topic {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mentoring-card__count {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-600);
+  background: var(--color-primary-50);
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .mentoring-card__rows {
@@ -1389,9 +1410,14 @@
   flex-shrink: 0;
 }
 
-.mentoring-card__role-badge--mentor {
-  background: #DBEAFE;
-  color: #1E40AF;
+.mentoring-card__role-badge--expert {
+  background: #E0E7FF;
+  color: #3730A3;
+}
+
+.mentoring-card__role-badge--confirmed {
+  background: #D1FAE5;
+  color: #065F46;
 }
 
 .mentoring-card__role-badge--learner {
@@ -1417,10 +1443,16 @@
   white-space: nowrap;
 }
 
-.mentoring-card__person--mentor {
-  background: var(--color-primary-50);
-  border: 1px solid var(--color-primary-200);
-  color: var(--color-primary-700);
+.mentoring-card__person--expert {
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  color: #3730A3;
+}
+
+.mentoring-card__person--confirmed {
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  color: #065F46;
 }
 
 .mentoring-card__person--learner {
@@ -1441,14 +1473,35 @@
   flex-shrink: 0;
 }
 
-.mentoring-card__person--mentor .mentoring-card__avatar {
-  background: var(--color-primary-500);
+.mentoring-card__person--expert .mentoring-card__avatar {
+  background: #6366F1;
+  color: #fff;
+}
+
+.mentoring-card__person--confirmed .mentoring-card__avatar {
+  background: #10B981;
   color: #fff;
 }
 
 .mentoring-card__person--learner .mentoring-card__avatar {
   background: #EC4899;
   color: #fff;
+}
+
+.mentoring-card__gauges {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.mentoring-card__no-mentor {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  margin-top: var(--space-2);
 }
 
 /* --- Responsive adjustments --- */

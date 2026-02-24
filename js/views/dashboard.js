@@ -6,6 +6,7 @@ import { getState } from '../state.js';
 import { getAllSkillNames, getSkillStats, isSkillCritical } from '../models/data.js';
 import { escapeHtml, average, getSkillLabel, SKILL_LEVELS } from '../utils/helpers.js';
 import { getDemoScenarios } from '../services/demos.js';
+import { renderOnboarding } from '../components/onboarding.js';
 
 /**
  * Render the dashboard view.
@@ -15,13 +16,7 @@ export function renderDashboardView(container) {
   const state = getState();
 
   if (state.members.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state__icon">📈</div>
-        <h3 class="empty-state__title">Aucune donnée</h3>
-        <p class="empty-state__description">Importez des données pour voir le dashboard de synthèse.</p>
-      </div>
-    `;
+    renderOnboarding(container);
     return;
   }
 
@@ -71,28 +66,17 @@ export function renderDashboardView(container) {
       </div>
     </div>
 
-    <div class="dashboard-grid" style="margin-top: var(--space-6);">
-      <!-- Top Experts -->
-      <div class="card">
-        <div class="card__header">
-          <h3 class="card__title">Top experts</h3>
-          <span class="badge badge--info">Classement</span>
-        </div>
-        ${renderTopExperts(state.members)}
+    <!-- Top Experts -->
+    <div class="card" style="margin-top: var(--space-6);">
+      <div class="card__header">
+        <h3 class="card__title">Top experts</h3>
+        <span class="badge badge--info">Classement</span>
       </div>
-
-      <!-- Growth Potential -->
-      <div class="card">
-        <div class="card__header">
-          <h3 class="card__title">Potentiel de croissance</h3>
-          <span class="badge badge--info">Appétence élevée</span>
-        </div>
-        ${renderGrowthPotential(state.members, allSkills)}
-      </div>
+      ${renderTopExperts(state.members)}
     </div>
 
-    <!-- Mentoring Opportunities -->
-    ${renderMentoringOpportunities(state.members)}
+    <!-- Development & Mentoring -->
+    ${renderDevelopmentSection(state.members, allSkills)}
 
     <!-- Criticality Breakdown -->
     <div class="card" style="margin-top: var(--space-6);">
@@ -771,175 +755,174 @@ function renderTopExperts(members) {
 }
 
 /**
- * Render the growth potential section - skills where high appetence meets low level.
- * Shows dual gauges for level vs appetence gap.
+ * Compute development & mentoring opportunities per skill.
+ * Merges growth potential and mentoring: identifies experts (level 4),
+ * confirmés (level 3), and motivated learners (appetence >= 2, level < 3).
  * @param {Object[]} members - All members
  * @param {string[]} allSkills - All skill names
- * @returns {string} HTML for the growth potential section
+ * @returns {Object[]} Opportunities sorted by relevance
  */
-function renderGrowthPotential(members, allSkills) {
-  const potentials = [];
+function computeDevelopmentOpportunities(members, allSkills) {
+  const opportunities = [];
 
   for (const skill of allSkills) {
-    let candidateCount = 0;
-    let totalAppetence = 0;
+    const experts = [];
+    const confirmed = [];
+    const learners = [];
     let totalLevel = 0;
+    let totalAppetence = 0;
     let entries = 0;
 
-    for (const member of members) {
-      const entry = member.skills[skill];
+    for (const m of members) {
+      const entry = m.skills[skill];
       if (!entry) continue;
       entries++;
       totalLevel += entry.level;
       totalAppetence += entry.appetence;
-      if (entry.level < 3 && entry.appetence >= 2) candidateCount++;
+      const initials = m.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+      const person = { name: m.name, initials };
+
+      if (entry.level === 4) {
+        experts.push(person);
+      } else if (entry.level === 3) {
+        confirmed.push(person);
+      }
+
+      if (entry.level < 3 && entry.appetence >= 2) {
+        learners.push(person);
+      }
     }
 
-    if (candidateCount === 0) continue;
+    if (learners.length === 0) continue;
 
+    const hasMentors = experts.length > 0 || confirmed.length > 0;
     const avgLevel = entries > 0 ? totalLevel / entries : 0;
     const avgAppetence = entries > 0 ? totalAppetence / entries : 0;
-    const gap = avgAppetence - avgLevel / 4 * 3;
-
-    potentials.push({ skill, candidateCount, avgLevel, avgAppetence, gap });
-  }
-
-  potentials.sort((a, b) => b.candidateCount - a.candidateCount || b.gap - a.gap);
-  const top = potentials.slice(0, 8);
-
-  if (top.length === 0) {
-    return '<p style="padding: var(--space-4); color: var(--color-text-secondary); text-align: center;">Aucun potentiel de croissance identifié.</p>';
-  }
-
-  return `
-    <div class="growth-list">
-      ${top.map(p => {
-        const levelPct = (p.avgLevel / 4 * 100).toFixed(0);
-        const appPct = (p.avgAppetence / 3 * 100).toFixed(0);
-
-        return `
-        <div class="growth-card">
-          <div class="growth-card__header">
-            <span class="growth-card__skill">${escapeHtml(p.skill)}</span>
-            <span class="growth-card__candidates">${p.candidateCount} candidat${p.candidateCount > 1 ? 's' : ''}</span>
-          </div>
-          <div class="growth-card__gauges">
-            <div class="growth-card__gauge">
-              <span class="growth-card__gauge-label">Niveau</span>
-              <div class="growth-card__gauge-track">
-                <div class="growth-card__gauge-fill growth-card__gauge-fill--level" style="width: ${levelPct}%;"></div>
-              </div>
-              <span class="growth-card__gauge-value">${p.avgLevel.toFixed(1)}</span>
-            </div>
-            <div class="growth-card__gauge">
-              <span class="growth-card__gauge-label">Appétence</span>
-              <div class="growth-card__gauge-track">
-                <div class="growth-card__gauge-fill growth-card__gauge-fill--appetence" style="width: ${appPct}%;"></div>
-              </div>
-              <span class="growth-card__gauge-value">${p.avgAppetence.toFixed(1)}</span>
-            </div>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
-  `;
-}
-
-/**
- * Compute mentoring opportunities: cross-reference ownership ↔ appetences.
- * Finds topics where member A has appetence X and member B has ownership X.
- * @param {Object[]} members - All members
- * @returns {Object[]} Mentoring opportunities sorted by relevance
- */
-function computeMentoringOpportunities(members) {
-  // Build maps: topic → [members with ownership], topic → [members with appetence]
-  const ownershipMap = new Map();
-  const appetenceMap = new Map();
-
-  for (const m of members) {
-    const initials = m.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    const person = { id: m.id, name: m.name, initials };
-
-    for (const val of (m.role || '').split(',').map(v => v.trim()).filter(Boolean)) {
-      if (!ownershipMap.has(val)) ownershipMap.set(val, []);
-      ownershipMap.get(val).push(person);
-    }
-    for (const val of (m.appetences || '').split(',').map(v => v.trim()).filter(Boolean)) {
-      if (!appetenceMap.has(val)) appetenceMap.set(val, []);
-      appetenceMap.get(val).push(person);
-    }
-  }
-
-  // Find intersections: topics that appear in both maps
-  const opportunities = [];
-  for (const [topic, mentors] of ownershipMap) {
-    const learners = appetenceMap.get(topic);
-    if (!learners) continue;
-
-    // Filter out self-matches (same person is both mentor and learner)
-    const mentorIds = new Set(mentors.map(m => m.id));
-    const actualLearners = learners.filter(l => !mentorIds.has(l.id));
-    if (actualLearners.length === 0) continue;
 
     opportunities.push({
-      topic,
-      mentors,
-      learners: actualLearners,
-      pairCount: mentors.length * actualLearners.length,
+      skill,
+      experts,
+      confirmed,
+      learners,
+      hasMentors,
+      avgLevel,
+      avgAppetence,
+      candidateCount: learners.length,
+      pairCount: (experts.length + confirmed.length) * learners.length,
     });
   }
 
-  opportunities.sort((a, b) => b.pairCount - a.pairCount);
+  opportunities.sort((a, b) => {
+    if (a.hasMentors !== b.hasMentors) return a.hasMentors ? -1 : 1;
+    return b.pairCount - a.pairCount || b.candidateCount - a.candidateCount;
+  });
+
   return opportunities;
 }
 
 /**
- * Render mentoring opportunities section.
+ * Render the unified development & mentoring section.
+ * Combines growth potential gauges with mentor/learner identification.
+ * Differentiates Expert (level 4) from Confirmé (level 3).
  * @param {Object[]} members - All members
- * @returns {string} HTML for the mentoring section
+ * @param {string[]} allSkills - All skill names
+ * @returns {string} HTML for the development section
  */
-function renderMentoringOpportunities(members) {
-  const opportunities = computeMentoringOpportunities(members);
+function renderDevelopmentSection(members, allSkills) {
+  const opportunities = computeDevelopmentOpportunities(members, allSkills);
   if (opportunities.length === 0) return '';
 
   return `
     <div class="card" style="margin-top: var(--space-6);">
       <div class="card__header">
-        <h3 class="card__title">Opportunités de mentorat</h3>
-        <span class="badge badge--info">${opportunities.length} sujet${opportunities.length > 1 ? 's' : ''}</span>
+        <h3 class="card__title">Développement & Mentorat</h3>
+        <span class="badge badge--info">${opportunities.length} compétence${opportunities.length > 1 ? 's' : ''}</span>
       </div>
       <div class="card__subtitle" style="padding: 0 var(--space-5); margin-bottom: var(--space-4); font-size: var(--font-size-xs); color: var(--color-text-secondary);">
-        Correspondances entre ownership et appétences — un membre expert peut accompagner un membre intéressé
+        Membres motivés (appétence ≥ 2) pouvant progresser, avec mentors potentiels
       </div>
       <div class="mentoring-list">
-        ${opportunities.slice(0, 8).map(opp => `
+        ${opportunities.slice(0, 10).map(opp => {
+          const levelPct = (opp.avgLevel / 4 * 100).toFixed(0);
+          const appPct = (opp.avgAppetence / 3 * 100).toFixed(0);
+
+          return `
           <div class="mentoring-card">
-            <div class="mentoring-card__topic">${escapeHtml(opp.topic)}</div>
-            <div class="mentoring-card__rows">
-              <div class="mentoring-card__row">
-                <span class="mentoring-card__role-badge mentoring-card__role-badge--mentor">Ownership</span>
-                <div class="mentoring-card__people">
-                  ${opp.mentors.map(m => `
-                    <span class="mentoring-card__person mentoring-card__person--mentor">
-                      <span class="mentoring-card__avatar">${m.initials}</span>${escapeHtml(m.name)}
-                    </span>
-                  `).join('')}
+            <div class="mentoring-card__header">
+              <span class="mentoring-card__topic">${escapeHtml(opp.skill)}</span>
+              <span class="mentoring-card__count">${opp.candidateCount} candidat${opp.candidateCount > 1 ? 's' : ''}</span>
+            </div>
+            ${opp.hasMentors ? `
+              <div class="mentoring-card__rows">
+                ${opp.experts.length > 0 ? `
+                  <div class="mentoring-card__row">
+                    <span class="mentoring-card__role-badge mentoring-card__role-badge--expert">Expert</span>
+                    <div class="mentoring-card__people">
+                      ${opp.experts.map(m => `
+                        <span class="mentoring-card__person mentoring-card__person--expert">
+                          <span class="mentoring-card__avatar">${m.initials}</span>${escapeHtml(m.name)}
+                        </span>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+                ${opp.confirmed.length > 0 ? `
+                  <div class="mentoring-card__row">
+                    <span class="mentoring-card__role-badge mentoring-card__role-badge--confirmed">Confirmé</span>
+                    <div class="mentoring-card__people">
+                      ${opp.confirmed.map(m => `
+                        <span class="mentoring-card__person mentoring-card__person--confirmed">
+                          <span class="mentoring-card__avatar">${m.initials}</span>${escapeHtml(m.name)}
+                        </span>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+                <div class="mentoring-card__arrow">→</div>
+                <div class="mentoring-card__row">
+                  <span class="mentoring-card__role-badge mentoring-card__role-badge--learner">Motivé</span>
+                  <div class="mentoring-card__people">
+                    ${opp.learners.map(l => `
+                      <span class="mentoring-card__person mentoring-card__person--learner">
+                        <span class="mentoring-card__avatar">${l.initials}</span>${escapeHtml(l.name)}
+                      </span>
+                    `).join('')}
+                  </div>
                 </div>
               </div>
-              <div class="mentoring-card__arrow">→</div>
-              <div class="mentoring-card__row">
-                <span class="mentoring-card__role-badge mentoring-card__role-badge--learner">Appétence</span>
-                <div class="mentoring-card__people">
-                  ${opp.learners.map(l => `
-                    <span class="mentoring-card__person mentoring-card__person--learner">
-                      <span class="mentoring-card__avatar">${l.initials}</span>${escapeHtml(l.name)}
-                    </span>
-                  `).join('')}
+            ` : `
+              <div class="mentoring-card__rows">
+                <div class="mentoring-card__row">
+                  <span class="mentoring-card__role-badge mentoring-card__role-badge--learner">Motivé</span>
+                  <div class="mentoring-card__people">
+                    ${opp.learners.map(l => `
+                      <span class="mentoring-card__person mentoring-card__person--learner">
+                        <span class="mentoring-card__avatar">${l.initials}</span>${escapeHtml(l.name)}
+                      </span>
+                    `).join('')}
+                  </div>
                 </div>
+                <div class="mentoring-card__no-mentor">Aucun mentor interne — formation externe recommandée</div>
+              </div>
+            `}
+            <div class="mentoring-card__gauges">
+              <div class="growth-card__gauge">
+                <span class="growth-card__gauge-label">Niveau</span>
+                <div class="growth-card__gauge-track">
+                  <div class="growth-card__gauge-fill growth-card__gauge-fill--level" style="width: ${levelPct}%;"></div>
+                </div>
+                <span class="growth-card__gauge-value">${opp.avgLevel.toFixed(1)}</span>
+              </div>
+              <div class="growth-card__gauge">
+                <span class="growth-card__gauge-label">Appétence</span>
+                <div class="growth-card__gauge-track">
+                  <div class="growth-card__gauge-fill growth-card__gauge-fill--appetence" style="width: ${appPct}%;"></div>
+                </div>
+                <span class="growth-card__gauge-value">${opp.avgAppetence.toFixed(1)}</span>
               </div>
             </div>
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
       </div>
     </div>
   `;
