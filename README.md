@@ -92,90 +92,21 @@ Lorsqu'aucune donnee n'est chargee, un wizard guide la creation de la premiere m
 
 ### Matrice heatmap
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Matrice des competences                                     │
-│  [Recherche...] [Categorie ▼] [Role ▼] [Niveau ▼]           │
-├────────────┬──────────┬──────┬──────┬──────┬──────┬──────────┤
-│ Nom      ▲ │ Role     │ JS   │React │Python│Docker│ Moy.     │
-├────────────┼──────────┼──────┼──────┼──────┼──────┼──────────┤
-│ J. Dupont  │ Dev      │ ████ │ ███░ │ █░░░ │ ██░░ │ 2.5      │
-│ M. Martin  │ TL       │ ███░ │ ████ │ ██░░ │ ███░ │ 3.0      │
-│ P. Durand  │ DevOps   │ █░░░ │ ░░░░ │ ██░░ │ ████ │ 1.8      │
-└────────────┴──────────┴──────┴──────┴──────┴──────┴──────────┘
-  Cliquer une cellule ouvre l'edition inline :
-  ┌─────────────────────┐
-  │ Niveau     [0][1][2][3][4] │
-  │ Appetence  [0][1][2][3]    │
-  └─────────────────────┘
-```
+Tableau membres x competences avec heatmap couleur, edition inline (niveau + appetence), tri multi-colonnes et filtres avances.
+
+![Matrice heatmap](screenshots/matrice.jpg)
 
 ### Dashboard
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Dashboard - Vue d'ensemble                                  │
-├──────────┬──────────┬──────────┬──────────────────────────────┤
-│  👥 8    │  🎯 12   │  📊 72%  │  ⚠ 2 critiques              │
-│ Membres  │ Comp.    │ Couvert. │  Alertes                     │
-├──────────┴──────────┴──────────┴──────────────────────────────┤
-│                                                              │
-│  (◔) 85%    (◔) 72%    (◔) 35%    (◔) 58%                   │
-│  Sante     Couvert.  Confirmes+ Appetence                    │
-│                                                              │
-├──────────────────────────┬───────────────────────────────────┤
-│  🔴 Critique             │  Priorites de formation           │
-│  Kubernetes : 0 expert   │  ┌─ URGENTE ─ Kubernetes ────┐   │
-│  Spark : 0 expert        │  │  Candidats: ● AD ● BM     │   │
-│                          │  └────────────────────────────┘   │
-│  🟠 Attention            │  ┌─ MOYENNE ─ Spark ─────────┐   │
-│  Terraform : 1 pers.     │  │  Aucun candidat motive     │   │
-│                          │  └────────────────────────────┘   │
-├──────────────────────────┴───────────────────────────────────┤
-│                                                              │
-│  Developpement & Mentorat                  5 competences     │
-│  ┌───────────────────────────────────────────────────────┐   │
-│  │ JavaScript                                3 candidats │   │
-│  │ ─────────────────────────────────────────────         │   │
-│  │ 🟣 Expert    ● AD Alice D.                            │   │
-│  │ 🟢 Confirme  ● BM Bob M.  ● CD Charlie D.            │   │
-│  │       →                                               │   │
-│  │ 🩷 Motive    ● EF Emma F.  ● GH Guy H.  ● IJ Ines J.│   │
-│  │                                                       │   │
-│  │ Niveau    ████████░░░░  2.1                           │   │
-│  │ Appetence █████████████ 2.8                           │   │
-│  └───────────────────────────────────────────────────────┘   │
-│  ┌───────────────────────────────────────────────────────┐   │
-│  │ Docker                                    2 candidats │   │
-│  │ ─────────────────────────────────────────────         │   │
-│  │ 🩷 Motive    ● AD Alice D.  ● BM Bob M.              │   │
-│  │ Aucun mentor interne — formation externe recommandee  │   │
-│  │                                                       │   │
-│  │ Niveau    █████░░░░░░░  1.5                           │   │
-│  │ Appetence ██████████░░  2.3                           │   │
-│  └───────────────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────┘
-```
+KPIs de couverture, anneaux de sante, alertes critiques, priorites de formation, section unifiee "Developpement & Mentorat" avec badges Expert / Confirme / Motive et jauges duales.
+
+![Dashboard](screenshots/dashboard.jpg)
 
 ### Radar comparatif
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Profil Radar                                                │
-│  ● J. Dupont  ● M. Martin  ○ P. Durand  ○ Moyenne           │
-├──────────────────────────────┬───────────────────────────────┤
-│                              │  Jean Dupont                  │
-│         JavaScript           │  Role: Developpeur            │
-│            4                 │                               │
-│           ╱ ╲                │  JavaScript  ████  4          │
-│    Docker╱   ╲React          │  React       ███░  3          │
-│     2  ╱  ╲╱  ╲ 3           │  Python      █░░░  1          │
-│        ╲      ╱              │  Docker      ██░░  2          │
-│         ╲  ╱╲╱               │                               │
-│    Python╲╱                  │  Appetence moy. : 2.1         │
-│           1                  │                               │
-└──────────────────────────────┴───────────────────────────────┘
-```
+Graphique radar par membre avec comparaison multi-profils (jusqu'a 5), overlay moyenne equipe, et detail des niveaux par competence.
+
+![Radar comparatif](screenshots/radar.jpg)
 
 ---
 
