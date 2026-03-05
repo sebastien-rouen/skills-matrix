@@ -3,12 +3,13 @@
  * Provides category management, member editing, display settings, and backup/restore.
  */
 
-import { getState, updateCategories, updateSettings, updateMember, removeMember } from '../state.js';
+import { getState, updateCategories, updateSettings, updateMember, removeMember, replaceMembers } from '../state.js';
 import { getAllSkillNames } from '../models/data.js';
 import { exportJSON, parseJSON } from '../services/exporter.js';
-import { toastSuccess, toastError, toastWarning } from '../components/toast.js';
+import { loadApiSettings, saveApiSettings, clearApiSettings, testConnection, convertApiDataToMembers } from '../services/api-source.js';
+import { toastSuccess, toastError, toastWarning, toastInfo } from '../components/toast.js';
 import { confirm } from '../components/modal.js';
-import { downloadFile, escapeHtml } from '../utils/helpers.js';
+import { downloadFile, escapeHtml, debounce } from '../utils/helpers.js';
 
 /**
  * Render the settings view.
@@ -34,6 +35,8 @@ export function renderSettingsView(container) {
     ${renderThresholdsCard(settings)}
 
     ${renderExportCard(settings)}
+
+    ${renderApiSourceCard()}
 
     ${renderBackupCard(hasData)}
   `;
@@ -245,6 +248,70 @@ function renderExportCard(settings) {
 }
 
 /**
+ * Render the API source configuration card.
+ * @returns {string} Card HTML
+ */
+function renderApiSourceCard() {
+  const settings = loadApiSettings();
+  return `
+    <div class="card" style="margin-bottom: var(--space-6);">
+      <div class="card__header">
+        <h3 class="card__title">Source externe (API)</h3>
+      </div>
+      <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-bottom: var(--space-4);">
+        Connectez une API JSON pour importer des compétences. Les paramètres sont conservés dans le navigateur.
+      </p>
+      <div class="api-source">
+        <div class="api-source__field">
+          <label for="api-source-url" style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); display: block; margin-bottom: var(--space-1);">
+            URL du endpoint JSON
+          </label>
+          <input type="url" id="api-source-url" class="form-input"
+                 value="${escapeHtml(settings.url)}"
+                 placeholder="https://example.com/api/skills.json" />
+        </div>
+        <div class="api-source__field">
+          <label for="api-source-token" style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); display: block; margin-bottom: var(--space-1);">
+            Token d'authentification
+          </label>
+          <div class="api-source__token-row">
+            <input type="password" id="api-source-token" class="form-input"
+                   value="${escapeHtml(settings.token)}"
+                   placeholder="Bearer token (optionnel)"
+                   style="flex: 1;" />
+            <button class="btn btn--ghost btn--sm" id="api-source-toggle-token" title="Afficher/masquer" type="button"
+                    style="min-width: 40px;">👁️</button>
+          </div>
+        </div>
+        <div class="api-source__status" id="api-source-status"></div>
+        <div class="api-source__actions">
+          <button class="btn btn--secondary btn--sm" id="api-source-test">Tester la connexion</button>
+          <button class="btn btn--primary btn--sm" id="api-source-import">Importer</button>
+          <button class="btn btn--ghost btn--sm" id="api-source-clear" style="margin-left: auto; color: var(--color-danger-500);">Effacer</button>
+        </div>
+      </div>
+      <details style="margin-top: var(--space-4);">
+        <summary style="font-size: var(--font-size-xs); color: var(--color-text-secondary); cursor: pointer;">Format JSON attendu</summary>
+        <pre style="font-size: var(--font-size-xs); background: var(--color-bg-tertiary); padding: var(--space-3); border-radius: var(--radius-md); margin-top: var(--space-2); overflow-x: auto;">{
+  "members": [
+    {
+      "name": "Alice Dupont",
+      "role": "Dev Frontend",
+      "appetences": "IA, Cloud",
+      "skills": {
+        "JavaScript": { "level": 4, "appetence": 2 },
+        "React": { "level": 3, "appetence": 3 },
+        "Python": 1
+      }
+    }
+  ]
+}</pre>
+      </details>
+    </div>
+  `;
+}
+
+/**
  * Render the backup and data management card.
  * @param {boolean} hasData - Whether data exists
  * @returns {string} Card HTML
@@ -385,6 +452,85 @@ function bindSettingsEvents(container) {
       updateSettings({ csvDelimiter: value });
       toastSuccess('Séparateur CSV mis à jour.');
     });
+  });
+
+  // --- API Source ---
+  const apiUrlInput = container.querySelector('#api-source-url');
+  const apiTokenInput = container.querySelector('#api-source-token');
+  const apiStatus = container.querySelector('#api-source-status');
+
+  const persistApiFields = debounce(() => {
+    saveApiSettings(
+      apiUrlInput?.value.trim() || '',
+      apiTokenInput?.value.trim() || ''
+    );
+  }, 800);
+
+  apiUrlInput?.addEventListener('input', persistApiFields);
+  apiTokenInput?.addEventListener('input', persistApiFields);
+
+  container.querySelector('#api-source-toggle-token')?.addEventListener('click', () => {
+    if (!apiTokenInput) return;
+    const visible = apiTokenInput.type === 'text';
+    apiTokenInput.type = visible ? 'password' : 'text';
+    container.querySelector('#api-source-toggle-token').textContent = visible ? '👁️' : '🙈';
+  });
+
+  const setApiStatus = (msg, type) => {
+    if (!apiStatus) return;
+    apiStatus.textContent = msg;
+    apiStatus.className = 'api-source__status';
+    if (type) apiStatus.classList.add('api-source__status--' + type);
+    apiStatus.style.display = msg ? 'block' : 'none';
+  };
+
+  container.querySelector('#api-source-test')?.addEventListener('click', async () => {
+    const url = apiUrlInput?.value.trim();
+    const token = apiTokenInput?.value.trim();
+    saveApiSettings(url, token);
+    setApiStatus('Connexion en cours...', 'info');
+
+    const result = await testConnection(url, token);
+    if (result.success) {
+      setApiStatus(`Connexion OK — ${result.skillCount} competences, ${result.memberCount} membres detectes`, 'success');
+    } else {
+      setApiStatus(result.error, 'error');
+    }
+  });
+
+  container.querySelector('#api-source-import')?.addEventListener('click', async () => {
+    const url = apiUrlInput?.value.trim();
+    const token = apiTokenInput?.value.trim();
+    saveApiSettings(url, token);
+    setApiStatus('Import en cours...', 'info');
+
+    const result = await testConnection(url, token);
+    if (!result.success) {
+      setApiStatus(result.error, 'error');
+      return;
+    }
+
+    const members = convertApiDataToMembers(result.data);
+    const confirmed = await confirm(
+      'Importer depuis l\'API',
+      `Importer ${members.length} membre(s) et leurs compétences ? Cela remplacera les données existantes.`
+    );
+    if (!confirmed) {
+      setApiStatus('Import annule', 'info');
+      return;
+    }
+
+    replaceMembers(members);
+    setApiStatus(`Import reussi — ${members.length} membre(s)`, 'success');
+    toastSuccess(`${members.length} membre(s) importé(s) depuis l'API.`);
+  });
+
+  container.querySelector('#api-source-clear')?.addEventListener('click', () => {
+    clearApiSettings();
+    if (apiUrlInput) apiUrlInput.value = '';
+    if (apiTokenInput) apiTokenInput.value = '';
+    setApiStatus('', '');
+    toastInfo('Paramètres API effacés.');
   });
 
   // --- Backup & Data ---
