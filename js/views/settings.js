@@ -4,7 +4,7 @@
  * multiple API sources, display settings, and backup/restore.
  */
 
-import { getState, updateCategories, updateSettings, updateMember, removeMember, replaceMembers, addMembers } from '../state.js';
+import { getState, updateCategories, updateSettings, updateMember, removeMember, replaceMembers, addMembers, removeSkill } from '../state.js';
 import { getAllSkillNames, getAllGroups } from '../models/data.js';
 import { exportJSON, parseJSON } from '../services/exporter.js';
 import {
@@ -111,7 +111,11 @@ function renderCategoryCard(state) {
           <button class="btn btn--ghost btn--sm category-remove-btn" data-category="${escapeHtml(catName)}">✕</button>
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: var(--space-1);">
-          ${skills.map(s => `<span class="badge badge--info">${escapeHtml(s)}</span>`).join('')}
+          ${skills.map(s => `<span class="badge badge--info skill-remove-badge" data-category="${escapeHtml(catName)}" data-skill="${escapeHtml(s)}" title="Cliquer pour retirer de la categorie" style="cursor: pointer;">${escapeHtml(s)}</span>`).join('')}
+        </div>
+        <div style="display: flex; gap: var(--space-1); margin-top: var(--space-2);">
+          <input type="text" class="form-input add-skill-input" data-category="${escapeHtml(catName)}" placeholder="Nouvelle competence..." style="flex: 1; font-size: var(--font-size-xs); padding: 4px 8px;" />
+          <button class="btn btn--ghost btn--sm add-skill-btn" data-category="${escapeHtml(catName)}">+</button>
         </div>
       </div>
     `;
@@ -122,7 +126,7 @@ function renderCategoryCard(state) {
       <div style="padding: var(--space-3); background: var(--color-bg-tertiary); border-radius: var(--radius-lg); border: 1px dashed var(--color-border);">
         <strong style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Non categorisees</strong>
         <div style="display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2);">
-          ${uncategorized.map(s => `<span class="badge badge--neutral">${escapeHtml(s)}</span>`).join('')}
+          ${uncategorized.map(s => `<span class="badge badge--neutral skill-delete-badge" data-skill="${escapeHtml(s)}" title="Cliquer pour supprimer cette competence" style="cursor: pointer;">${escapeHtml(s)} <span style="opacity: 0.5; margin-left: 2px;">✕</span></span>`).join('')}
         </div>
       </div>
     `;
@@ -499,6 +503,77 @@ function bindSettingsEvents(container) {
       delete cats[catName];
       updateCategories(cats);
       toastSuccess(`Categorie "${catName}" supprimee.`);
+    });
+  });
+
+  // Ajouter une competence dans une categorie
+  container.querySelectorAll('.add-skill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const catName = btn.dataset.category;
+      const input = container.querySelector(`.add-skill-input[data-category="${catName}"]`);
+      const skillName = input.value.trim();
+      if (!skillName) return;
+
+      const state = getState();
+      const cats = { ...state.categories };
+      if (!cats[catName]) cats[catName] = [];
+      if (cats[catName].includes(skillName)) {
+        toastWarning(`« ${skillName} » existe deja dans ${catName}.`);
+        return;
+      }
+      cats[catName] = [...cats[catName], skillName];
+      updateCategories(cats);
+
+      // Ajouter la competence a tous les membres (level 0, appetence 0)
+      const members = state.members.map(m => {
+        if (!m.skills[skillName]) {
+          return { ...m, skills: { ...m.skills, [skillName]: { level: 0, appetence: 0 } } };
+        }
+        return m;
+      });
+      replaceMembers(members);
+
+      toastSuccess(`Competence « ${skillName} » ajoutee dans ${catName}.`);
+    });
+  });
+
+  // Valider avec Enter dans l'input de competence
+  container.querySelectorAll('.add-skill-input').forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        container.querySelector(`.add-skill-btn[data-category="${input.dataset.category}"]`)?.click();
+      }
+    });
+  });
+
+  // Retirer une competence d'une categorie (clic sur le badge)
+  container.querySelectorAll('.skill-remove-badge').forEach(badge => {
+    badge.addEventListener('click', () => {
+      const catName = badge.dataset.category;
+      const skillName = badge.dataset.skill;
+      const state = getState();
+      const cats = { ...state.categories };
+      if (cats[catName]) {
+        cats[catName] = cats[catName].filter(s => s !== skillName);
+        if (cats[catName].length === 0) delete cats[catName];
+        updateCategories(cats);
+        toastSuccess(`« ${skillName} » retire de ${catName}.`);
+      }
+    });
+  });
+
+  // Supprimer une competence non categorisee (clic sur le badge)
+  container.querySelectorAll('.skill-delete-badge').forEach(badge => {
+    badge.addEventListener('click', async () => {
+      const skillName = badge.dataset.skill;
+      const confirmed = await confirm(
+        'Supprimer la competence',
+        `Supprimer « ${skillName} » de tous les membres ? Cette action est irreversible.`
+      );
+      if (!confirmed) return;
+      removeSkill(skillName);
+      toastSuccess(`Competence « ${skillName} » supprimee.`);
     });
   });
 

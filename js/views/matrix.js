@@ -3,7 +3,7 @@
  * Supports inline editing, sorting, and filtering.
  */
 
-import { getState, updateSkill, updateMember } from '../state.js';
+import { getState, updateSkill, updateMember, renameSkill } from '../state.js';
 import { getAllSkillNames, getAllRoles, isSkillCritical } from '../models/data.js';
 import { renderFilters, applyFilters } from '../components/filters.js';
 import { toastSuccess } from '../components/toast.js';
@@ -146,10 +146,11 @@ function renderTable(members, groupedSkills, state) {
     const displayName = maxLen > 0 && skill.length > maxLen
       ? skill.substring(0, maxLen - 1) + '…'
       : skill;
-    html += `<th>
-      <span class="sort-header" data-sort="skill:${skill}" style="cursor: pointer;" title="${escapeHtml(skill)}">
-        ${escapeHtml(displayName)}
-        ${critical ? ' <span style="color: #FCA5A5;" title="Compétence critique">⚠</span>' : ''}
+    html += `<th data-skill-header="${escapeHtml(skill)}">
+      <span class="skill-name" data-rename-skill="${escapeHtml(skill)}" style="cursor: pointer;" title="Cliquer pour renommer">
+        ${escapeHtml(displayName)}${critical ? ' <span style="color: #FCA5A5;" title="Compétence critique">⚠</span>' : ''}
+      </span>
+      <span class="sort-header" data-sort="skill:${skill}" style="cursor: pointer;" title="Trier">
         ${getSortIndicator('skill:' + skill)}
       </span>
     </th>`;
@@ -325,6 +326,16 @@ function bindMatrixEvents(container, state) {
     });
   });
 
+  // Clic sur le nom d'une competence → renommer
+  container.querySelectorAll('[data-rename-skill]').forEach(span => {
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const th = span.closest('th');
+      openSkillRenameEditor(th, span.dataset.renameSkill, container);
+    });
+  });
+
   // Close editor on outside click
   document.addEventListener('click', closeActiveEditor);
 
@@ -482,6 +493,52 @@ function openNameEditor(cell, memberId, viewContainer) {
     // Small delay to allow click events inside editor
     setTimeout(commit, 100);
   });
+  editor.addEventListener('click', (e) => e.stopPropagation());
+}
+
+/**
+ * Open an inline editor to rename a skill column.
+ * @param {HTMLElement} th - The header cell
+ * @param {string} oldName - Current skill name
+ * @param {HTMLElement} viewContainer - The matrix view container
+ */
+function openSkillRenameEditor(th, oldName, viewContainer) {
+  closeActiveEditor(true);
+
+  const editor = document.createElement('div');
+  editor.className = 'inline-edit';
+  editor.innerHTML = `
+    <div class="inline-edit__label">Renommer la competence</div>
+    <input type="text" class="inline-edit__input" value="${escapeHtml(oldName)}" />
+  `;
+
+  positionEditor(editor, th);
+  document.body.appendChild(editor);
+  activeEditor = editor;
+
+  const input = editor.querySelector('input');
+  input.focus();
+  input.select();
+
+  let committed = false;
+  const commit = () => {
+    if (committed) return;
+    if (!editor.parentNode) return; // Editeur deja ferme (clic sur une autre competence)
+    committed = true;
+    const newName = input.value.trim();
+    if (newName && newName !== oldName) {
+      renameSkill(oldName, newName);
+      toastSuccess(`Competence renommee : « ${newName} »`);
+      renderMatrixView(viewContainer);
+    }
+    closeActiveEditor();
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') { committed = true; closeActiveEditor(); }
+  });
+  input.addEventListener('blur', () => setTimeout(commit, 150));
   editor.addEventListener('click', (e) => e.stopPropagation());
 }
 

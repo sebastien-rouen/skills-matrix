@@ -158,6 +158,49 @@ export function updateSkill(memberId, skillName, skillEntry) {
 }
 
 /**
+ * Remove a skill from all members and categories.
+ * @param {string} skillName - Skill name to remove
+ */
+export function removeSkill(skillName) {
+  const current = getState();
+  for (const member of current.members) {
+    delete member.skills[skillName];
+  }
+  if (current.categories) {
+    for (const [cat, skills] of Object.entries(current.categories)) {
+      const idx = skills.indexOf(skillName);
+      if (idx !== -1) skills.splice(idx, 1);
+      if (skills.length === 0) delete current.categories[cat];
+    }
+  }
+  setState(current);
+  emit('skill:removed', skillName);
+}
+
+/**
+ * Rename a skill across all members and categories.
+ * @param {string} oldName - Current skill name
+ * @param {string} newName - New skill name
+ */
+export function renameSkill(oldName, newName) {
+  const current = getState();
+  for (const member of current.members) {
+    if (oldName in member.skills) {
+      member.skills[newName] = member.skills[oldName];
+      delete member.skills[oldName];
+    }
+  }
+  if (current.categories) {
+    for (const [cat, skills] of Object.entries(current.categories)) {
+      const idx = skills.indexOf(oldName);
+      if (idx !== -1) skills[idx] = newName;
+    }
+  }
+  setState(current);
+  emit('skill:renamed', { oldName, newName });
+}
+
+/**
  * Update the categories map.
  * @param {Object} categories - New categories map
  */

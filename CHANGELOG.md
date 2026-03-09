@@ -4,6 +4,33 @@ Toutes les modifications notables de Skills Matrix sont documentees ici.
 
 ---
 
+## [Non publie] - 2026-03-10
+
+### Renommage de competences, auto-categorisation enrichie, auto-save template
+
+- **Renommage inline** : clic sur le nom d'une competence dans la matrice pour la renommer (editeur positionne, Enter/Escape/blur).
+- **Tri separe** : icone de tri distincte du nom de competence dans les en-tetes.
+- **renameSkill()** : nouvelle mutation dans le store, renomme la competence pour tous les membres et toutes les categories.
+- **Auto-categorisation enrichie** : 10 categories (DevOps, Cloud, Observabilite, Reseau, SRE, Strategie...) avec patterns regex etendus.
+- **Creation de competences** : ajout direct depuis la gestion des categories (input + bouton "+"), creation dans tous les membres.
+- **Auto-save template** : sauvegarde automatique debounced (2s) vers le template personnalise actif, toggle dans la sidebar.
+- **Panel template sidebar** : card avec nom du template, badge, toggle switch custom (iOS-like), colle au footer.
+- **Rechargement au refresh** : au F5, les donnees sont rechargees depuis le fichier template (travail collaboratif multi-utilisateurs).
+
+### Fichiers modifies
+
+- `js/components/sidebar.js` (~220 lignes) - Panel template, auto-save listener, toggle, pause/resume
+- `js/app.js` (~155 lignes) - Rechargement template au demarrage
+- `js/state.js` (+23 lignes) - Mutation renameSkill()
+- `js/views/matrix.js` (+67 lignes) - Rename inline, separation nom/tri
+- `js/views/settings.js` (+63 lignes) - 10 categories auto-categorisation, creation competences
+- `js/views/import.js` (+8 lignes) - Reset activeTemplate au chargement demo
+- `js/models/data.js` (+2 lignes) - activeTemplate et autoSaveTemplate dans le state
+- `css/components.css` (+120 lignes) - Styles sidebar template card, toggle switch
+- `css/matrix.css` (+9 lignes) - Style .skill-name hover
+
+---
+
 ## [2.0.0] - 2026-03-09
 
 ### Refonte majeure — Templates, Serveur Express, Sources API

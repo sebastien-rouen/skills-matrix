@@ -3,14 +3,15 @@
  * Initializes state, renders the UI, and manages view routing.
  */
 
-import { initState, on, getState } from './state.js';
-import { renderSidebar, navigateTo } from './components/sidebar.js';
+import { initState, on, getState, replaceMembers, updateCategories } from './state.js';
+import { renderSidebar, navigateTo, setAutoSavePaused } from './components/sidebar.js';
 import { initToasts } from './components/toast.js';
 import { renderMatrixView } from './views/matrix.js';
 import { renderDashboardView } from './views/dashboard.js';
 import { renderRadarView, destroyRadarChart } from './views/radar.js';
 import { renderImportView } from './views/import.js';
 import { renderSettingsView } from './views/settings.js';
+import { loadCustomTemplate } from './services/templates.js';
 
 /** @type {Object<string, Function>} View renderers mapped by view ID */
 const VIEW_RENDERERS = {
@@ -34,6 +35,30 @@ function getViewFromHash() {
 }
 
 /**
+ * Reload data from the active template file (if any).
+ * Enables collaborative editing: on refresh, the latest file content is loaded.
+ */
+async function reloadActiveTemplate() {
+  const state = getState();
+  const tpl = state.activeTemplate;
+  if (!tpl || tpl.builtIn) return;
+
+  try {
+    setAutoSavePaused(true);
+    const data = await loadCustomTemplate(tpl.id);
+    if (data) {
+      replaceMembers(data.members);
+      updateCategories(data.categories);
+      console.log('[App] Template rechargé depuis le fichier :', tpl.title);
+    }
+  } catch (err) {
+    console.warn('[App] Impossible de recharger le template :', err.message);
+  } finally {
+    setAutoSavePaused(false);
+  }
+}
+
+/**
  * Initialize the application.
  * Sets up state, renders the initial UI, and subscribes to events.
  */
@@ -43,6 +68,9 @@ function init() {
 
   // Initialize state from localStorage
   initState();
+
+  // Si un template actif existe, recharger depuis le fichier (travail collaboratif)
+  reloadActiveTemplate();
 
   // Render sidebar
   const sidebarEl = document.getElementById('app-sidebar');

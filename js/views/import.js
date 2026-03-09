@@ -284,9 +284,13 @@ function bindTemplateButtons(container, templates) {
         if (!confirmed) return;
       }
 
+      const tpl = templates.find(t => t.id === tplId);
       replaceMembers(data.members);
       updateCategories(data.categories);
-      updateState({ activeDemo: null });
+      updateState({
+        activeDemo: null,
+        activeTemplate: tpl ? { id: tpl.id, title: tpl.title, description: tpl.description || '', builtIn: !!tpl.builtIn } : null,
+      });
       toastSuccess('Template chargé avec succès.');
       navigateTo('dashboard');
     });
@@ -371,7 +375,7 @@ function bindImportEvents(container) {
       replaceMembers(members);
       updateCategories(categories);
       // Store active demo ID for dashboard advice
-      updateState({ activeDemo: demoId });
+      updateState({ activeDemo: demoId, activeTemplate: null });
       toastSuccess(`Démo « ${scenario.title} » chargée avec succès.`);
       // Redirect to dashboard to see the results
       navigateTo('dashboard');

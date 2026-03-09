@@ -209,5 +209,7 @@ export function createDefaultState() {
       skillNameMaxLength: 12,
       csvDelimiter: ';',
     },
+    activeTemplate: null,
+    autoSaveTemplate: true,
   };
 }
