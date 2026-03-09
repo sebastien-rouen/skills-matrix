@@ -22,14 +22,16 @@ export function exportCSV(members, categories = {}, delimiter = ';') {
   const rows = [];
 
   // Header row
-  rows.push(['Nom', 'Ownership', 'Appétences', ...skills].join(delimiter));
+  rows.push(['Nom', 'Ownership', 'Appétences', 'Groupes', ...skills].join(delimiter));
 
   // Data rows
   for (const member of members) {
+    const groupsStr = (member.groups || []).join(', ');
     const cells = [
       escapeCsvField(member.name, delimiter),
       escapeCsvField(member.role, delimiter),
       escapeCsvField(member.appetences || '', delimiter),
+      escapeCsvField(groupsStr, delimiter),
       ...skills.map(skill => {
         const entry = member.skills[skill];
         if (!entry) return '0/0';
@@ -144,8 +146,8 @@ export function exportDetailedCSV(members, categories = {}, delimiter = ';', thr
   rows.push('MATRICE DÉTAILLÉE');
   blank();
 
-  // Header: Nom | Ownership | Appétences | Skill1 (Niveau) | Skill1 (Appétence) | ...
-  const headerParts = ['Nom', 'Ownership', 'Appétences'];
+  // Header: Nom | Ownership | Appétences | Groupes | Skill1 (Niveau) | Skill1 (Appétence) | ...
+  const headerParts = ['Nom', 'Ownership', 'Appétences', 'Groupes'];
   for (const skill of skills) {
     headerParts.push(`${skill} (Niveau)`, `${skill} (Appétence)`);
   }
@@ -157,6 +159,7 @@ export function exportDetailedCSV(members, categories = {}, delimiter = ';', thr
       escapeCsvField(member.name, d),
       escapeCsvField(member.role, d),
       escapeCsvField(member.appetences || '', d),
+      escapeCsvField((member.groups || []).join(', '), d),
     ];
     for (const skill of skills) {
       const entry = member.skills[skill];
@@ -219,7 +222,7 @@ export function exportDetailedCSV(members, categories = {}, delimiter = ';', thr
   blank();
 
   const memberHeader = [
-    'Membre', 'Ownership', 'Appétences',
+    'Membre', 'Ownership', 'Appétences', 'Groupes',
     'Nb compétences', 'Niveau moyen', 'Couverture',
     'Expert (4)', 'Confirmé (3)', 'Intermédiaire (2)', 'Débutant (1)', 'Aucun (0)',
     'Critiques couvertes', 'Critiques non couvertes',
@@ -235,6 +238,7 @@ export function exportDetailedCSV(members, categories = {}, delimiter = ';', thr
       escapeCsvField(member.name, d),
       escapeCsvField(member.role, d),
       escapeCsvField(member.appetences || '', d),
+      escapeCsvField((member.groups || []).join(', '), d),
       ms.total,
       ms.avgLevel,
       `${ms.coverage}%`,

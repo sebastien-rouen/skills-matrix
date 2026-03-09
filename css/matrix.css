@@ -295,6 +295,11 @@
   color: #86198F;
 }
 
+.cell-chip--group {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
 .cell-chip--empty {
   background: transparent;
   color: var(--color-text-secondary);

@@ -4,7 +4,7 @@
  */
 
 import { getState, updateFilters } from '../state.js';
-import { getAllRoles } from '../models/data.js';
+import { getAllRoles, getAllGroups } from '../models/data.js';
 import { debounce } from '../utils/helpers.js';
 
 /**
@@ -14,6 +14,7 @@ import { debounce } from '../utils/helpers.js';
 export function renderFilters(container) {
   const state = getState();
   const roles = getAllRoles(state.members);
+  const groups = getAllGroups(state.members);
   const categoryNames = Object.keys(state.categories);
 
   container.innerHTML = `
@@ -46,6 +47,17 @@ export function renderFilters(container) {
           `<option value="${role}" ${state.filters.role === role ? 'selected' : ''}>${role}</option>`
         ).join('')}
       </select>
+
+      ${groups.length > 0 ? `
+      <div class="filters-bar__divider"></div>
+
+      <select class="filters-bar__select" id="filter-group">
+        <option value="">Tous groupes</option>
+        ${groups.map(group =>
+          `<option value="${group}" ${state.filters.group === group ? 'selected' : ''}>${group}</option>`
+        ).join('')}
+      </select>
+      ` : ''}
 
       <div class="filters-bar__divider"></div>
 
@@ -81,6 +93,7 @@ function bindFilterEvents(container) {
   const searchInput = container.querySelector('#filter-search');
   const categorySelect = container.querySelector('#filter-category');
   const roleSelect = container.querySelector('#filter-role');
+  const groupSelect = container.querySelector('#filter-group');
   const levelSelect = container.querySelector('#filter-level');
   const criticalCheckbox = container.querySelector('#filter-critical');
   const resetBtn = container.querySelector('#filter-reset');
@@ -102,6 +115,10 @@ function bindFilterEvents(container) {
     updateFilters({ role: e.target.value });
   });
 
+  groupSelect?.addEventListener('change', (e) => {
+    updateFilters({ group: e.target.value });
+  });
+
   levelSelect?.addEventListener('change', (e) => {
     updateFilters({ minLevel: parseInt(e.target.value, 10) });
   });
@@ -115,6 +132,7 @@ function bindFilterEvents(container) {
       search: '',
       category: '',
       role: '',
+      group: '',
       minLevel: 0,
       showCriticalOnly: false,
     });
@@ -151,6 +169,11 @@ export function applyFilters(members, skillNames, filters, categories, criticalT
   // Filter by role
   if (filters.role) {
     filteredMembers = filteredMembers.filter(m => m.role === filters.role);
+  }
+
+  // Filter by group
+  if (filters.group) {
+    filteredMembers = filteredMembers.filter(m => (m.groups || []).includes(filters.group));
   }
 
   // Filter by category

@@ -1,0 +1,15 @@
+{
+  "name": "skills-matrix",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Matrice de compétences interactive",
+  "scripts": {
+    "start": "node server.js",
+    "pm2": "pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop skills-matrix",
+    "pm2:logs": "pm2 logs skills-matrix --lines 30"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

@@ -11,15 +11,17 @@ import { generateId, clamp } from '../utils/helpers.js';
  * @param {string} props.name - Member full name
  * @param {string} [props.role=''] - Member ownership (comma-separated)
  * @param {string} [props.appetences=''] - Member appetences (free text)
+ * @param {string[]} [props.groups=[]] - Groups the member belongs to
  * @param {Object} [props.skills={}] - Skills map { skillName: { level, appetence } }
  * @returns {Object} Member object with generated ID
  */
-export function createMember({ name, role = '', appetences = '', skills = {} } = {}) {
+export function createMember({ name, role = '', appetences = '', groups = [], skills = {} } = {}) {
   return {
     id: generateId(),
     name: name?.trim() || 'Sans nom',
     role: role?.trim() || '',
     appetences: appetences?.trim() || '',
+    groups: Array.isArray(groups) ? groups.map(g => g.trim()).filter(Boolean) : [],
     skills: { ...skills },
   };
 }
@@ -47,6 +49,7 @@ export function validateMember(member) {
     name: member.name,
     role: member.role,
     appetences: member.appetences,
+    groups: member.groups,
   });
 
   if (member.id) sanitized.id = member.id;
@@ -91,6 +94,21 @@ export function getAllRoles(members) {
     if (member.role) roles.add(member.role);
   }
   return [...roles].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+/**
+ * Get all unique groups across all members.
+ * @param {Object[]} members - Array of member objects
+ * @returns {string[]} Sorted list of unique group names
+ */
+export function getAllGroups(members) {
+  const groups = new Set();
+  for (const member of members) {
+    for (const g of (member.groups || [])) {
+      if (g) groups.add(g);
+    }
+  }
+  return [...groups].sort((a, b) => a.localeCompare(b, 'fr'));
 }
 
 /**
@@ -182,6 +200,7 @@ export function createDefaultState() {
       search: '',
       category: '',
       role: '',
+      group: '',
       minLevel: 0,
       showCriticalOnly: false,
     },

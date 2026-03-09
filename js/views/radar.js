@@ -262,6 +262,96 @@ function renderSingleProfile(member, radarSkills, criticalSet) {
 }
 
 /**
+ * Render brief visual insights when comparing multiple members.
+ * Highlights: gaps, complementarity, strengths overlap, critical risks.
+ * @param {Object[]} members - Selected members
+ * @param {string[]} skills - All compared skills
+ * @param {Set<string>} criticalSet - Critical skill names
+ * @returns {string} HTML
+ */
+function renderCompareInsights(members, skills, criticalSet) {
+  const tips = [];
+
+  // 1. Gaps collectifs : skills ou personne n'a >= 3
+  const teamGaps = skills.filter(s =>
+    members.every(m => (m.skills[s]?.level ?? 0) < 3)
+  );
+
+  // 2. Forces communes : skills ou tout le monde a >= 3
+  const sharedStrengths = skills.filter(s =>
+    members.every(m => (m.skills[s]?.level ?? 0) >= 3)
+  );
+
+  // 3. Complementarite : un seul membre couvre (>= 3) une skill que les autres n'ont pas (< 2)
+  const complementary = [];
+  for (const s of skills) {
+    const strong = members.filter(m => (m.skills[s]?.level ?? 0) >= 3);
+    const weak = members.filter(m => (m.skills[s]?.level ?? 0) < 2);
+    if (strong.length === 1 && weak.length >= members.length - 1) {
+      complementary.push({ skill: s, member: strong[0].name });
+    }
+  }
+
+  // 4. Critiques non couvertes par le sous-groupe
+  const uncoveredCritical = [...criticalSet].filter(s =>
+    members.every(m => (m.skills[s]?.level ?? 0) < 3)
+  );
+
+  // Build tips
+  if (uncoveredCritical.length > 0) {
+    tips.push({
+      icon: '🚨',
+      color: '#FEE2E2',
+      border: '#FECACA',
+      text: `<strong>${uncoveredCritical.length} critique${uncoveredCritical.length > 1 ? 's' : ''} non couvert${uncoveredCritical.length > 1 ? 'es' : 'e'}</strong> par ce groupe : ${uncoveredCritical.slice(0, 3).map(s => escapeHtml(s)).join(', ')}${uncoveredCritical.length > 3 ? '...' : ''}`,
+    });
+  }
+
+  if (complementary.length > 0) {
+    const items = complementary.slice(0, 3).map(c =>
+      `<strong>${escapeHtml(c.member)}</strong> sur ${escapeHtml(c.skill)}`
+    ).join(', ');
+    tips.push({
+      icon: '🧩',
+      color: '#E0F2FE',
+      border: '#BAE6FD',
+      text: `Complementarite : ${items}${complementary.length > 3 ? '...' : ''}`,
+    });
+  }
+
+  if (sharedStrengths.length > 0) {
+    tips.push({
+      icon: '💪',
+      color: '#D1FAE5',
+      border: '#A7F3D0',
+      text: `${sharedStrengths.length} force${sharedStrengths.length > 1 ? 's' : ''} commune${sharedStrengths.length > 1 ? 's' : ''} : ${sharedStrengths.slice(0, 4).map(s => escapeHtml(s)).join(', ')}${sharedStrengths.length > 4 ? '...' : ''}`,
+    });
+  }
+
+  if (teamGaps.length > 0) {
+    tips.push({
+      icon: '📉',
+      color: '#FEF3C7',
+      border: '#FDE68A',
+      text: `${teamGaps.length} lacune${teamGaps.length > 1 ? 's' : ''} collective${teamGaps.length > 1 ? 's' : ''} : ${teamGaps.slice(0, 4).map(s => escapeHtml(s)).join(', ')}${teamGaps.length > 4 ? '...' : ''}`,
+    });
+  }
+
+  if (tips.length === 0) return '';
+
+  return `
+    <div class="compare-insights" style="display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4);">
+      ${tips.map(t => `
+        <div style="display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2) var(--space-3); background: ${t.color}; border: 1px solid ${t.border}; border-radius: var(--radius-lg); font-size: var(--font-size-xs); line-height: 1.5;">
+          <span style="flex-shrink: 0;">${t.icon}</span>
+          <span>${t.text}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/**
  * Render a comparison table for multiple selected members.
  * @param {Object[]} members - Selected members (2+)
  * @param {string[]} radarSkills - Skills on the radar
@@ -316,6 +406,9 @@ function renderCompareTable(members, radarSkills, criticalSet) {
     <div style="font-weight: var(--font-weight-semibold); margin-bottom: var(--space-4); font-size: var(--font-size-lg);">
       Comparaison (${members.length} membres)
     </div>
+
+    ${renderCompareInsights(members, sortedSkills, criticalSet)}
+
     <div style="overflow-x: auto;">
       <table class="radar-compare-table">
         <thead>

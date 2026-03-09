@@ -111,7 +111,7 @@ function renderTable(members, groupedSkills, state) {
   const catEntries = Object.entries(groupedSkills);
   if (catEntries.length > 1 || (catEntries.length === 1 && catEntries[0][0] !== 'Autres')) {
     html += '<thead><tr class="category-row">';
-    html += '<th></th><th></th>';
+    html += '<th></th><th></th><th></th>';
     for (const [catName, skills] of catEntries) {
       html += `<th colspan="${skills.length}" style="text-align: center;">${escapeHtml(catName)}</th>`;
     }
@@ -130,6 +130,11 @@ function renderTable(members, groupedSkills, state) {
   html += `<th>
     <span class="sort-header" data-sort="role" style="cursor: pointer;">
       Ownership ${getSortIndicator('role')}
+    </span>
+  </th>`;
+  html += `<th>
+    <span class="sort-header" data-sort="groups" style="cursor: pointer;">
+      Groupes ${getSortIndicator('groups')}
     </span>
   </th>`;
 
@@ -167,6 +172,15 @@ function renderTable(members, groupedSkills, state) {
       <div class="editable-cell editable-cell--chips" data-member-id="${member.id}" data-field="role">
         ${member.role
           ? member.role.split(',').map(r => r.trim()).filter(Boolean).map(r => `<span class="cell-chip">${escapeHtml(r)}</span>`).join('')
+          : '<span class="cell-chip cell-chip--empty">-</span>'
+        }
+      </div>
+    </td>`;
+    const groups = Array.isArray(member.groups) ? member.groups : [];
+    html += `<td>
+      <div class="editable-cell editable-cell--chips" data-member-id="${member.id}" data-field="groups">
+        ${groups.length > 0
+          ? groups.map(g => `<span class="cell-chip cell-chip--group">${escapeHtml(g)}</span>`).join('')
           : '<span class="cell-chip cell-chip--empty">-</span>'
         }
       </div>
@@ -241,6 +255,9 @@ function applySorting(members, config) {
     } else if (config.key === 'role') {
       va = a.role.toLowerCase();
       vb = b.role.toLowerCase();
+    } else if (config.key === 'groups') {
+      va = (Array.isArray(a.groups) ? a.groups.join(', ') : '').toLowerCase();
+      vb = (Array.isArray(b.groups) ? b.groups.join(', ') : '').toLowerCase();
     } else if (config.key.startsWith('skill:')) {
       const skillName = config.key.slice(6);
       va = a.skills[skillName]?.level ?? 0;
@@ -302,6 +319,8 @@ function bindMatrixEvents(container, state) {
         openNameEditor(cell, memberId, container);
       } else if (field === 'role') {
         openChipEditor(cell, memberId, 'role', state, container);
+      } else if (field === 'groups') {
+        openGroupsEditor(cell, memberId, state, container);
       }
     });
   });
@@ -588,6 +607,106 @@ function openChipEditor(cell, memberId, field, state, viewContainer) {
   // Store a cleanup callback to re-render on close
   editor._onClose = () => renderMatrixView(viewContainer);
 
+  renderEditorContent();
+  editor.addEventListener('click', (e) => e.stopPropagation());
+}
+
+/**
+ * Open a chip-based inline editor for member groups.
+ * @param {HTMLElement} cell - The clicked cell
+ * @param {string} memberId - Member ID
+ * @param {Object} state - Current app state
+ * @param {HTMLElement} viewContainer - Matrix view container
+ */
+function openGroupsEditor(cell, memberId, state, viewContainer) {
+  closeActiveEditor(true);
+
+  const member = state.members.find(m => m.id === memberId);
+  if (!member) return;
+
+  const currentValues = Array.isArray(member.groups) ? [...member.groups] : [];
+
+  // Collect all known groups across members
+  const allValues = new Set();
+  for (const m of state.members) {
+    if (Array.isArray(m.groups)) m.groups.forEach(g => { if (g) allValues.add(g); });
+  }
+  const suggestions = [...allValues].sort((a, b) => a.localeCompare(b, 'fr'));
+
+  const editor = document.createElement('div');
+  editor.className = 'inline-edit inline-edit--chips';
+
+  const renderEditorContent = () => {
+    editor.innerHTML = `
+      <div class="inline-edit__label">Groupes</div>
+      <div class="inline-edit__chip-list">
+        ${currentValues.map(v => `
+          <span class="inline-edit__chip inline-edit__chip--active" data-value="${escapeHtml(v)}">
+            ${escapeHtml(v)} <span class="inline-edit__chip-remove">&times;</span>
+          </span>
+        `).join('')}
+      </div>
+      <div class="inline-edit__label" style="margin-top: 6px;">Suggestions</div>
+      <div class="inline-edit__chip-list">
+        ${suggestions.filter(s => !currentValues.includes(s)).map(s => `
+          <span class="inline-edit__chip inline-edit__chip--suggestion" data-value="${escapeHtml(s)}">
+            + ${escapeHtml(s)}
+          </span>
+        `).join('') || '<span style="font-size: 11px; color: var(--color-text-secondary);">-</span>'}
+      </div>
+      <div style="margin-top: 6px; display: flex; gap: 4px;">
+        <input type="text" class="inline-edit__input" placeholder="Ajouter..." style="flex: 1;" />
+        <button class="inline-edit__add-btn" title="Ajouter">+</button>
+      </div>
+    `;
+    bindEditorEvents();
+  };
+
+  const commitField = () => {
+    updateMember(memberId, { groups: [...currentValues] });
+  };
+
+  const bindEditorEvents = () => {
+    editor.querySelectorAll('.inline-edit__chip--active').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = currentValues.indexOf(chip.dataset.value);
+        if (idx !== -1) currentValues.splice(idx, 1);
+        commitField();
+        renderEditorContent();
+      });
+    });
+
+    editor.querySelectorAll('.inline-edit__chip--suggestion').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!currentValues.includes(chip.dataset.value)) currentValues.push(chip.dataset.value);
+        commitField();
+        renderEditorContent();
+      });
+    });
+
+    const input = editor.querySelector('.inline-edit__input');
+    const addBtn = editor.querySelector('.inline-edit__add-btn');
+    const addFromInput = () => {
+      const val = input.value.trim();
+      if (val && !currentValues.includes(val)) {
+        currentValues.push(val);
+        commitField();
+        renderEditorContent();
+      }
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addFromInput(); }
+      if (e.key === 'Escape') { closeActiveEditor(); renderMatrixView(viewContainer); }
+    });
+    addBtn.addEventListener('click', (e) => { e.stopPropagation(); addFromInput(); });
+  };
+
+  positionEditor(editor, cell);
+  document.body.appendChild(editor);
+  activeEditor = editor;
+  editor._onClose = () => renderMatrixView(viewContainer);
   renderEditorContent();
   editor.addEventListener('click', (e) => e.stopPropagation());
 }

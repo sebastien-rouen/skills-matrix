@@ -110,6 +110,64 @@ export function confirm(title, message) {
 }
 
 /**
+ * Show a styled form modal to create a new template.
+ * @param {number} memberCount - Number of members in current data (for preview)
+ * @param {number} skillCount - Number of skills in current data (for preview)
+ * @returns {Promise<{title: string, description: string}|null>} Form data or null if cancelled
+ */
+export function promptCreateTemplate(memberCount, skillCount) {
+  return new Promise((resolve) => {
+    const backdrop = showModal({
+      title: 'Nouveau template',
+      body: `
+        <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+          <div style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--color-bg-secondary); border-radius: var(--radius-lg); border: 1px solid var(--color-border);">
+            <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--color-primary-100); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">📦</div>
+            <div>
+              <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">${memberCount} membre${memberCount > 1 ? 's' : ''} · ${skillCount} competence${skillCount > 1 ? 's' : ''}</div>
+              <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">Ces donnees seront enregistrees dans le template</div>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="tpl-title">Nom du template *</label>
+            <input class="form-input" type="text" id="tpl-title" placeholder="Ex : Equipe Produit Q1 2026" autocomplete="one-time-code" data-lpignore="true" data-1p-ignore data-form-type="other" autofocus>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="tpl-description">Description</label>
+            <input class="form-input" type="text" id="tpl-description" placeholder="Ex : 12 devs, focus IA et Cloud" autocomplete="one-time-code" data-lpignore="true" data-1p-ignore data-form-type="other">
+          </div>
+        </div>
+      `,
+      confirmLabel: 'Creer le template',
+      confirmClass: 'btn--primary',
+      onConfirm: () => {
+        const title = backdrop.querySelector('#tpl-title').value.trim();
+        if (!title) {
+          resolve(null);
+          return;
+        }
+        const description = backdrop.querySelector('#tpl-description').value.trim();
+        resolve({ title, description });
+      },
+      onCancel: () => resolve(null),
+    });
+
+    // Focus le champ titre apres l'animation d'ouverture
+    requestAnimationFrame(() => {
+      const input = backdrop.querySelector('#tpl-title');
+      input?.focus();
+      // Valider avec Enter
+      backdrop.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && document.activeElement?.id?.startsWith('tpl-')) {
+          e.preventDefault();
+          backdrop.querySelector('[data-action="confirm"]')?.click();
+        }
+      });
+    });
+  });
+}
+
+/**
  * Close the currently active modal.
  */
 export function closeModal() {

@@ -14,9 +14,12 @@ Desktop.ini
 .claude/plans/
 .claude/projects/
 
-# Node (if ever added)
+# Node
 node_modules/
 package-lock.json
+
+# Templates locaux (crees via l'app, non commites)
+templates/*.local.json
 
 # Logs
 *.log

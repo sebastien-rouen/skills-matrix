@@ -3,7 +3,7 @@
  */
 
 import { getState } from '../state.js';
-import { getAllSkillNames, getSkillStats, isSkillCritical } from '../models/data.js';
+import { getAllSkillNames, getAllGroups, getSkillStats, isSkillCritical } from '../models/data.js';
 import { escapeHtml, average, getSkillLabel, SKILL_LEVELS } from '../utils/helpers.js';
 import { getDemoScenarios } from '../services/demos.js';
 import { renderOnboarding } from '../components/onboarding.js';
@@ -35,7 +35,7 @@ export function renderDashboardView(container) {
     </div>
 
     <!-- KPI Cards -->
-    ${renderKpiCards(state.members, allSkills, criticalSkills, avgCoverage, state.categories, threshold)}
+    ${renderKpiCards(state.members, allSkills, criticalSkills, avgCoverage, state.categories, threshold, getAllGroups(state.members))}
 
     <!-- Contextual Advice (when a demo is loaded) -->
     ${renderDemoAdvice(state)}
@@ -99,16 +99,17 @@ export function renderDashboardView(container) {
 }
 
 /**
- * Render the 4 KPI cards with detailed hover popins.
+ * Render the KPI cards with detailed hover popins.
  * @param {Object[]} members - All members
  * @param {string[]} allSkills - All skill names
  * @param {string[]} criticalSkills - Critical skill names
  * @param {number} avgCoverage - Average coverage percentage
  * @param {Object} categories - Skill categories
  * @param {number} threshold - Critical threshold
+ * @param {string[]} groups - All group names
  * @returns {string} KPI grid HTML
  */
-function renderKpiCards(members, allSkills, criticalSkills, avgCoverage, categories, threshold) {
+function renderKpiCards(members, allSkills, criticalSkills, avgCoverage, categories, threshold, groups) {
   // --- Membres popin data ---
   const roleCounts = {};
   for (const m of members) {
@@ -243,6 +244,167 @@ function renderKpiCards(members, allSkills, criticalSkills, avgCoverage, categor
               Toutes les compétences sont couvertes
             </div>
           `}
+        </div>
+      </div>
+
+      ${renderScoreKpi(members)}
+
+      ${renderBusFactorKpi(members, allSkills)}
+
+      ${groups.length > 0 ? renderGroupsKpi(members, groups) : ''}
+    </div>
+  `;
+}
+
+/**
+ * Render the Score Moyen KPI card.
+ * Shows global average skill level (0-4).
+ */
+function renderScoreKpi(members) {
+  let totalLevel = 0;
+  let count = 0;
+  const memberScores = [];
+
+  for (const m of members) {
+    const entries = Object.values(m.skills);
+    if (entries.length === 0) continue;
+    const avg = entries.reduce((s, e) => s + e.level, 0) / entries.length;
+    memberScores.push({ name: m.name, avg });
+    totalLevel += entries.reduce((s, e) => s + e.level, 0);
+    count += entries.length;
+  }
+
+  const globalAvg = count > 0 ? (totalLevel / count) : 0;
+  const topMembers = [...memberScores].sort((a, b) => b.avg - a.avg).slice(0, 4);
+  const bottomMembers = [...memberScores].sort((a, b) => a.avg - b.avg).slice(0, 3);
+  const avgColor = globalAvg >= 3 ? '#10B981' : globalAvg >= 2 ? '#3B82F6' : '#F59E0B';
+
+  return `
+    <div class="kpi-card dashboard-popin">
+      <div class="kpi-card__icon" style="background: ${avgColor}22; color: ${avgColor};">📈</div>
+      <div>
+        <div class="kpi-card__value">${globalAvg.toFixed(1)}<span style="font-size: var(--font-size-sm); color: var(--color-text-tertiary);">/4</span></div>
+        <div class="kpi-card__label">Score moyen</div>
+      </div>
+      <div class="dashboard-popin__content">
+        <div class="dashboard-popin__title">Niveau moyen global</div>
+        <div class="dashboard-popin__desc">Moyenne de toutes les evaluations membre x competence</div>
+        ${topMembers.length > 0 ? `
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-bottom: var(--space-1);">Meilleurs scores :</div>
+          <div class="dashboard-popin__list">
+            ${topMembers.map(m => `
+              <div class="dashboard-popin__row">
+                <span class="dashboard-popin__row-label">${escapeHtml(m.name)}</span>
+                <span class="dashboard-popin__row-value" style="color: var(--color-success);">${m.avg.toFixed(1)}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        ${bottomMembers.length > 0 && bottomMembers[0].avg < globalAvg ? `
+          <div class="dashboard-popin__divider"></div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-bottom: var(--space-1);">A accompagner :</div>
+          <div class="dashboard-popin__list">
+            ${bottomMembers.map(m => `
+              <div class="dashboard-popin__row">
+                <span class="dashboard-popin__row-label">${escapeHtml(m.name)}</span>
+                <span class="dashboard-popin__row-value" style="color: #D97706;">${m.avg.toFixed(1)}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the Bus Factor KPI card.
+ * Skills where only 1 person is Confirmed or Expert = single point of failure.
+ */
+function renderBusFactorKpi(members, allSkills) {
+  const singlePoints = [];
+  for (const skill of allSkills) {
+    const stats = getSkillStats(members, skill);
+    const ce = stats.levels[3] + stats.levels[4];
+    if (ce === 1) {
+      const holder = members.find(m => (m.skills[skill]?.level ?? 0) >= 3);
+      singlePoints.push({ skill, holder: holder?.name || '?' });
+    }
+  }
+
+  const riskColor = singlePoints.length > 3 ? '#DC2626' : singlePoints.length > 0 ? '#F59E0B' : '#10B981';
+
+  return `
+    <div class="kpi-card dashboard-popin">
+      <div class="kpi-card__icon" style="background: ${riskColor}22; color: ${riskColor};">🚌</div>
+      <div>
+        <div class="kpi-card__value">${singlePoints.length}</div>
+        <div class="kpi-card__label">Bus Factor</div>
+      </div>
+      <div class="dashboard-popin__content">
+        <div class="dashboard-popin__title">Single Point of Failure</div>
+        <div class="dashboard-popin__desc">Competences avec exactement 1 seul Confirme/Expert</div>
+        ${singlePoints.length > 0 ? `
+          <div class="dashboard-popin__list">
+            ${singlePoints.slice(0, 6).map(sp => `
+              <div class="dashboard-popin__row">
+                <span class="dashboard-popin__row-label">${escapeHtml(sp.skill)}</span>
+                <span class="dashboard-popin__row-value">${escapeHtml(sp.holder)}</span>
+              </div>
+            `).join('')}
+          </div>
+          ${singlePoints.length > 6 ? `<div style="font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-top: var(--space-2);">+ ${singlePoints.length - 6} autre(s)…</div>` : ''}
+          <div class="dashboard-popin__divider"></div>
+          <div class="dashboard-popin__highlight dashboard-popin__highlight--warning">
+            Si cette personne part, la competence est perdue
+          </div>
+        ` : `
+          <div class="dashboard-popin__highlight dashboard-popin__highlight--success">
+            Aucun risque de dependance individuelle
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the Groups KPI card.
+ * Shows number of groups with member distribution.
+ */
+function renderGroupsKpi(members, groups) {
+  const groupCounts = {};
+  for (const g of groups) {
+    groupCounts[g] = members.filter(m => (m.groups || []).includes(g)).length;
+  }
+  const sortedGroups = Object.entries(groupCounts).sort((a, b) => b[1] - a[1]);
+  const avgPerGroup = groups.length > 0
+    ? (sortedGroups.reduce((s, [, c]) => s + c, 0) / groups.length).toFixed(1)
+    : 0;
+  const membersWithGroup = members.filter(m => (m.groups || []).length > 0).length;
+
+  return `
+    <div class="kpi-card dashboard-popin">
+      <div class="kpi-card__icon" style="background: #E0E7FF; color: #4338CA;">🏷</div>
+      <div>
+        <div class="kpi-card__value">${groups.length}</div>
+        <div class="kpi-card__label">Groupes</div>
+      </div>
+      <div class="dashboard-popin__content">
+        <div class="dashboard-popin__title">Repartition par groupe</div>
+        <div class="dashboard-popin__desc">${membersWithGroup}/${members.length} membre(s) dans au moins un groupe</div>
+        <div class="dashboard-popin__list">
+          ${sortedGroups.slice(0, 6).map(([name, count]) => `
+            <div class="dashboard-popin__row">
+              <span class="dashboard-popin__row-label">${escapeHtml(name)}</span>
+              <span class="dashboard-popin__row-value">${count} pers.</span>
+            </div>
+          `).join('')}
+        </div>
+        ${groups.length > 6 ? `<div style="font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-top: var(--space-2);">+ ${groups.length - 6} autre(s)…</div>` : ''}
+        <div class="dashboard-popin__divider"></div>
+        <div class="dashboard-popin__highlight dashboard-popin__highlight--info">
+          ~${avgPerGroup} membre(s) par groupe en moyenne
         </div>
       </div>
     </div>

@@ -68,18 +68,6 @@ export function getDemoScenarios() {
       ],
       load: loadDataDemo,
     },
-    {
-      id: 'tribu-value',
-      title: '💎 Tribu Value - Coaching & Transformation',
-      description: 'Tribu de 17 coachs agiles, Scrum Masters et consultants avec 22 compétences couvrant le coaching, les OKR, le leadership et l\'accompagnement d\'équipes. Données réelles avec 3 membres sans évaluation.',
-      advice: [
-        '<strong>Lean Portfolio Management</strong> et <strong>Value Management Office</strong> sont critiques : seul Samy maîtrise le LPM (niveau 4), le VMO est quasi-absent de la tribu.',
-        '3 membres n\'ont pas encore rempli leur évaluation (<strong>Thomas, Yves, Aline</strong>) - priorisez la complétion pour avoir une vision exhaustive.',
-        'Le socle <strong>Coaching Agile + Facilitation + Formation</strong> est très solide (majorité de niveaux 4), mais les compétences <strong>Produit</strong> (Vision, Engagement, Outcome Based Roadmap) restent portées par peu de monde.',
-        '<strong>Data / IA</strong> est un angle mort : seul Sébastien est au niveau 4, alors que la data est clé pour mesurer la valeur. Envisagez un plan de montée en compétences collectif.',
-      ],
-      load: loadTribuValueDemo,
-    },
   ];
 }
 
@@ -99,32 +87,32 @@ function loadStartupDemo() {
       'JavaScript': [4, 2], 'TypeScript': [4, 3], 'React': [4, 3], 'Node.js': [2, 1],
       'PostgreSQL': [1, 0], 'Docker': [2, 1], 'Kubernetes': [0, 1], 'CI/CD': [2, 2],
       'AWS': [1, 2], 'Cybersécurité': [1, 1], 'UX Design': [3, 3], 'IA / ML': [0, 3],
-    }, 'UX, IA/ML'),
+    }, 'UX, IA/ML', ['Squad Produit']),
     m('Karim Benzara', 'DevOps / SRE', {
       'JavaScript': [1, 0], 'TypeScript': [1, 0], 'React': [0, 0], 'Node.js': [2, 1],
       'PostgreSQL': [3, 2], 'Docker': [4, 3], 'Kubernetes': [4, 3], 'CI/CD': [4, 3],
       'AWS': [4, 3], 'Cybersécurité': [2, 2], 'UX Design': [0, 0], 'IA / ML': [0, 1],
-    }, 'Cloud, Sécurité'),
+    }, 'Cloud, Sécurité', ['Plateforme']),
     m('Sophie Leclerc', 'Développeuse Fullstack', {
       'JavaScript': [3, 2], 'TypeScript': [3, 3], 'React': [3, 2], 'Node.js': [3, 3],
       'PostgreSQL': [2, 1], 'Docker': [1, 2], 'Kubernetes': [0, 2], 'CI/CD': [1, 1],
       'AWS': [1, 2], 'Cybersécurité': [0, 1], 'UX Design': [2, 2], 'IA / ML': [1, 3],
-    }, 'IA/ML, Fullstack'),
+    }, 'IA/ML, Fullstack', ['Squad Produit']),
     m('Antoine Moreau', 'Développeur Backend', {
       'JavaScript': [2, 1], 'TypeScript': [3, 2], 'React': [1, 0], 'Node.js': [4, 3],
       'PostgreSQL': [4, 2], 'Docker': [2, 2], 'Kubernetes': [1, 2], 'CI/CD': [2, 2],
       'AWS': [2, 3], 'Cybersécurité': [1, 1], 'UX Design': [0, 0], 'IA / ML': [2, 3],
-    }, 'Cloud, IA/ML'),
+    }, 'Cloud, IA/ML', ['Squad Growth']),
     m('Inès Dufour', 'Product Designer', {
       'JavaScript': [1, 1], 'TypeScript': [0, 1], 'React': [1, 2], 'Node.js': [0, 0],
       'PostgreSQL': [0, 0], 'Docker': [0, 0], 'Kubernetes': [0, 0], 'CI/CD': [0, 0],
       'AWS': [0, 0], 'Cybersécurité': [0, 0], 'UX Design': [4, 3], 'IA / ML': [1, 2],
-    }, 'Design System, IA'),
+    }, 'Design System, IA', ['Squad Produit', 'Squad Growth']),
     m('Rémi Gauthier', 'Développeur Frontend', {
       'JavaScript': [3, 3], 'TypeScript': [2, 3], 'React': [3, 3], 'Node.js': [1, 1],
       'PostgreSQL': [0, 0], 'Docker': [1, 1], 'Kubernetes': [0, 1], 'CI/CD': [1, 1],
       'AWS': [0, 1], 'Cybersécurité': [0, 0], 'UX Design': [2, 2], 'IA / ML': [0, 2],
-    }, 'TypeScript, React'),
+    }, 'TypeScript, React', ['Squad Growth']),
   ];
 
   const categories = {
@@ -147,52 +135,52 @@ function loadTransformationDemo() {
       'Java EE': [4, 1], 'Spring Boot': [3, 2], 'Oracle DB': [4, 1], 'PL/SQL': [4, 0],
       'WebSphere': [4, 0], 'AWS': [1, 3], 'Azure': [0, 2], 'Docker': [1, 3],
       'Kubernetes': [0, 2], 'Terraform': [0, 3], 'Microservices': [2, 3], 'API REST': [3, 2],
-    }, 'Cloud, Microservices'),
+    }, 'Cloud, Microservices', ['Équipe Migration']),
     m('Nathalie Rousseau', 'Développeuse Senior', {
       'Java EE': [4, 1], 'Spring Boot': [4, 2], 'Oracle DB': [3, 1], 'PL/SQL': [3, 0],
       'WebSphere': [3, 0], 'AWS': [1, 2], 'Azure': [0, 1], 'Docker': [2, 3],
       'Kubernetes': [0, 2], 'Terraform': [0, 2], 'Microservices': [2, 3], 'API REST': [4, 2],
-    }, 'Docker, Microservices'),
+    }, 'Docker, Microservices', ['Équipe Migration']),
     m('Marc Lefebvre', 'DBA / Admin Système', {
       'Java EE': [1, 0], 'Spring Boot': [0, 0], 'Oracle DB': [4, 2], 'PL/SQL': [4, 1],
       'WebSphere': [3, 0], 'AWS': [0, 3], 'Azure': [0, 2], 'Docker': [1, 2],
       'Kubernetes': [0, 1], 'Terraform': [0, 2], 'Microservices': [0, 1], 'API REST': [1, 1],
-    }, 'AWS, Cloud DBA'),
+    }, 'AWS, Cloud DBA', ['Équipe Run']),
     m('Claire Petit', 'Chef de projet technique', {
       'Java EE': [2, 0], 'Spring Boot': [1, 1], 'Oracle DB': [2, 0], 'PL/SQL': [1, 0],
       'WebSphere': [2, 0], 'AWS': [1, 3], 'Azure': [1, 3], 'Docker': [1, 2],
       'Kubernetes': [0, 2], 'Terraform': [0, 2], 'Microservices': [2, 3], 'API REST': [2, 2],
-    }, 'Cloud, Agilité'),
+    }, 'Cloud, Agilité', ['Équipe Migration', 'Équipe Run']),
     m('Youssef Amrani', 'Développeur Junior', {
       'Java EE': [1, 0], 'Spring Boot': [2, 2], 'Oracle DB': [1, 0], 'PL/SQL': [0, 0],
       'WebSphere': [0, 0], 'AWS': [2, 3], 'Azure': [1, 3], 'Docker': [3, 3],
       'Kubernetes': [2, 3], 'Terraform': [1, 3], 'Microservices': [2, 3], 'API REST': [3, 3],
-    }, 'DevOps, Cloud Native'),
+    }, 'DevOps, Cloud Native', ['Équipe Migration']),
     m('Isabelle Martin', 'Développeuse', {
       'Java EE': [3, 1], 'Spring Boot': [3, 2], 'Oracle DB': [2, 0], 'PL/SQL': [2, 0],
       'WebSphere': [2, 0], 'AWS': [0, 2], 'Azure': [0, 1], 'Docker': [1, 2],
       'Kubernetes': [0, 1], 'Terraform': [0, 1], 'Microservices': [1, 2], 'API REST': [3, 2],
-    }, 'Spring Boot, API'),
+    }, 'Spring Boot, API', ['Équipe Run']),
     m('Thomas Girard', 'Ops / Intégration', {
       'Java EE': [1, 0], 'Spring Boot': [0, 0], 'Oracle DB': [2, 1], 'PL/SQL': [1, 0],
       'WebSphere': [4, 0], 'AWS': [1, 3], 'Azure': [1, 3], 'Docker': [2, 3],
       'Kubernetes': [1, 3], 'Terraform': [1, 3], 'Microservices': [1, 2], 'API REST': [1, 1],
-    }, 'Cloud, Infra as Code'),
+    }, 'Cloud, Infra as Code', ['Équipe Run']),
     m('Émilie Faure', 'QA / Testeuse', {
       'Java EE': [1, 0], 'Spring Boot': [1, 1], 'Oracle DB': [1, 0], 'PL/SQL': [1, 0],
       'WebSphere': [1, 0], 'AWS': [0, 1], 'Azure': [0, 1], 'Docker': [1, 1],
       'Kubernetes': [0, 0], 'Terraform': [0, 0], 'Microservices': [1, 1], 'API REST': [2, 2],
-    }, 'Tests automatisés'),
+    }, 'Tests automatisés', ['Équipe Migration', 'Équipe Run']),
     m('Laurent Dupont', 'Développeur Senior', {
       'Java EE': [4, 1], 'Spring Boot': [3, 2], 'Oracle DB': [3, 1], 'PL/SQL': [3, 0],
       'WebSphere': [3, 0], 'AWS': [0, 1], 'Azure': [0, 0], 'Docker': [1, 1],
       'Kubernetes': [0, 0], 'Terraform': [0, 0], 'Microservices': [1, 1], 'API REST': [3, 1],
-    }, 'Java, Architecture'),
+    }, 'Java, Architecture', ['Équipe Run']),
     m('Sandra Blanc', 'Scrum Master', {
       'Java EE': [0, 0], 'Spring Boot': [0, 0], 'Oracle DB': [0, 0], 'PL/SQL': [0, 0],
       'WebSphere': [0, 0], 'AWS': [1, 2], 'Azure': [1, 2], 'Docker': [0, 1],
       'Kubernetes': [0, 1], 'Terraform': [0, 1], 'Microservices': [2, 2], 'API REST': [1, 1],
-    }, 'Cloud, Agilité à l\'échelle'),
+    }, 'Cloud, Agilité à l\'échelle', ['Équipe Migration', 'Équipe Run']),
   ];
 
   const categories = {
@@ -214,42 +202,42 @@ function loadBalancedDemo() {
       'React': [4, 2], 'TypeScript': [4, 2], 'Node.js': [4, 2], 'PostgreSQL': [3, 1],
       'Redis': [3, 2], 'Docker': [3, 2], 'CSS / Tailwind': [3, 1], 'Tests E2E': [3, 2],
       'Elasticsearch': [2, 2], 'Product Management': [2, 3],
-    }, 'Product Management, Architecture'),
+    }, 'Product Management, Architecture', ['Squad Checkout', 'Squad Catalogue']),
     m('Camille Dubois', 'Développeuse Frontend', {
       'React': [4, 3], 'TypeScript': [3, 3], 'Node.js': [1, 1], 'PostgreSQL': [0, 0],
       'Redis': [0, 0], 'Docker': [1, 1], 'CSS / Tailwind': [4, 3], 'Tests E2E': [3, 2],
       'Elasticsearch': [0, 0], 'Product Management': [1, 3],
-    }, 'Product Management, Design System'),
+    }, 'Product Management, Design System', ['Squad Checkout']),
     m('Nicolas Bernard', 'Développeur Backend', {
       'React': [1, 0], 'TypeScript': [3, 2], 'Node.js': [4, 3], 'PostgreSQL': [4, 2],
       'Redis': [3, 2], 'Docker': [3, 2], 'CSS / Tailwind': [0, 0], 'Tests E2E': [2, 1],
       'Elasticsearch': [4, 3], 'Product Management': [1, 2],
-    }, 'Elasticsearch, Perf'),
+    }, 'Elasticsearch, Perf', ['Squad Catalogue']),
     m('Laura Mercier', 'Développeuse Fullstack', {
       'React': [3, 2], 'TypeScript': [3, 2], 'Node.js': [3, 2], 'PostgreSQL': [2, 2],
       'Redis': [2, 2], 'Docker': [2, 2], 'CSS / Tailwind': [3, 1], 'Tests E2E': [2, 2],
       'Elasticsearch': [1, 2], 'Product Management': [2, 3],
-    }, 'Product Management, Fullstack'),
+    }, 'Product Management, Fullstack', ['Squad Checkout']),
     m('Maxime Leroy', 'DevOps', {
       'React': [0, 0], 'TypeScript': [1, 1], 'Node.js': [2, 1], 'PostgreSQL': [2, 1],
       'Redis': [3, 2], 'Docker': [4, 3], 'CSS / Tailwind': [0, 0], 'Tests E2E': [2, 1],
       'Elasticsearch': [3, 2], 'Product Management': [0, 0],
-    }, 'Kubernetes, Monitoring'),
+    }, 'Kubernetes, Monitoring', ['Plateforme']),
     m('Chloé Vasseur', 'QA Engineer', {
       'React': [2, 1], 'TypeScript': [2, 1], 'Node.js': [1, 1], 'PostgreSQL': [1, 0],
       'Redis': [0, 0], 'Docker': [1, 1], 'CSS / Tailwind': [1, 0], 'Tests E2E': [4, 3],
       'Elasticsearch': [0, 0], 'Product Management': [2, 2],
-    }, 'Automatisation, Qualité'),
+    }, 'Automatisation, Qualité', ['Squad Checkout', 'Squad Catalogue']),
     m('Alexandre Morel', 'Développeur Frontend', {
       'React': [3, 2], 'TypeScript': [3, 3], 'Node.js': [1, 2], 'PostgreSQL': [0, 0],
       'Redis': [0, 0], 'Docker': [1, 1], 'CSS / Tailwind': [3, 1], 'Tests E2E': [2, 1],
       'Elasticsearch': [0, 0], 'Product Management': [1, 2],
-    }, 'TypeScript, Node.js'),
+    }, 'TypeScript, Node.js', ['Squad Catalogue']),
     m('Marine Caron', 'Product Owner', {
       'React': [1, 1], 'TypeScript': [0, 0], 'Node.js': [0, 0], 'PostgreSQL': [0, 0],
       'Redis': [0, 0], 'Docker': [0, 0], 'CSS / Tailwind': [1, 1], 'Tests E2E': [1, 1],
       'Elasticsearch': [0, 0], 'Product Management': [4, 3],
-    }, 'Stratégie Produit'),
+    }, 'Stratégie Produit', ['Squad Checkout', 'Squad Catalogue']),
   ];
 
   const categories = {
@@ -272,37 +260,37 @@ function loadJuniorDemo() {
       'JavaScript': [2, 3], 'TypeScript': [1, 3], 'React': [2, 3], 'Python': [2, 2],
       'SQL': [1, 2], 'Git': [2, 2], 'Docker': [0, 3], 'Tests unitaires': [1, 2],
       'Agilité / Scrum': [1, 2], 'Architecture logicielle': [0, 3],
-    }, 'React, Docker'),
+    }, 'React, Docker', ['Promo 2025']),
     m('Hugo Perrin', 'Développeur Junior', {
       'JavaScript': [2, 3], 'TypeScript': [1, 3], 'React': [1, 3], 'Python': [3, 3],
       'SQL': [2, 2], 'Git': [2, 2], 'Docker': [1, 3], 'Tests unitaires': [1, 2],
       'Agilité / Scrum': [1, 1], 'Architecture logicielle': [0, 3],
-    }, 'Python, Data Science'),
+    }, 'Python, Data Science', ['Promo 2025']),
     m('Manon Chevalier', 'Développeuse Junior', {
       'JavaScript': [2, 2], 'TypeScript': [2, 3], 'React': [2, 3], 'Python': [1, 1],
       'SQL': [1, 1], 'Git': [2, 2], 'Docker': [0, 2], 'Tests unitaires': [2, 3],
       'Agilité / Scrum': [2, 3], 'Architecture logicielle': [1, 3],
-    }, 'Agilité, Architecture'),
+    }, 'Agilité, Architecture', ['Promo 2025']),
     m('Lucas Roche', 'Développeur Junior', {
       'JavaScript': [1, 2], 'TypeScript': [1, 2], 'React': [0, 3], 'Python': [2, 3],
       'SQL': [2, 3], 'Git': [1, 1], 'Docker': [1, 3], 'Tests unitaires': [1, 2],
       'Agilité / Scrum': [1, 2], 'Architecture logicielle': [0, 2],
-    }, 'Python, Backend'),
+    }, 'Python, Backend', ['Promo 2025']),
     m('Jade Fournier', 'Développeuse Junior', {
       'JavaScript': [2, 3], 'TypeScript': [2, 3], 'React': [2, 3], 'Python': [1, 1],
       'SQL': [1, 2], 'Git': [2, 2], 'Docker': [1, 3], 'Tests unitaires': [1, 2],
       'Agilité / Scrum': [1, 2], 'Architecture logicielle': [0, 3],
-    }, 'React, TypeScript'),
+    }, 'React, TypeScript', ['Promo 2025']),
     m('Nathan Giraud', 'Développeur Junior', {
       'JavaScript': [1, 2], 'TypeScript': [0, 2], 'React': [1, 2], 'Python': [2, 3],
       'SQL': [2, 2], 'Git': [1, 1], 'Docker': [0, 2], 'Tests unitaires': [1, 1],
       'Agilité / Scrum': [0, 1], 'Architecture logicielle': [0, 2],
-    }, 'Python, SQL'),
+    }, 'Python, SQL', ['Promo 2025']),
     m('Zoé Lambert', 'Développeuse Junior', {
       'JavaScript': [2, 3], 'TypeScript': [1, 3], 'React': [1, 3], 'Python': [1, 2],
       'SQL': [1, 1], 'Git': [2, 2], 'Docker': [0, 3], 'Tests unitaires': [2, 3],
       'Agilité / Scrum': [2, 3], 'Architecture logicielle': [1, 3],
-    }, 'Agilité, Qualité'),
+    }, 'Agilité, Qualité', ['Promo 2025']),
   ];
 
   const categories = {
@@ -324,42 +312,42 @@ function loadDataDemo() {
       'Python': [4, 2], 'Machine Learning': [4, 3], 'Deep Learning': [4, 3], 'NLP': [3, 3],
       'SQL': [2, 0], 'Spark': [2, 2], 'MLOps': [1, 2], 'Airflow': [1, 1],
       'Power BI': [1, 0], 'Data Governance': [2, 1], 'Statistiques': [4, 2], 'Cloud (GCP)': [2, 2],
-    }, 'Deep Learning, NLP'),
+    }, 'Deep Learning, NLP', ['Cellule Data Science']),
     m('Pierre Blanc', 'Data Engineer Senior', {
       'Python': [3, 2], 'Machine Learning': [1, 3], 'Deep Learning': [0, 2], 'NLP': [0, 1],
       'SQL': [4, 2], 'Spark': [4, 3], 'MLOps': [3, 3], 'Airflow': [4, 3],
       'Power BI': [1, 0], 'Data Governance': [2, 1], 'Statistiques': [1, 1], 'Cloud (GCP)': [3, 2],
-    }, 'ML, Spark'),
+    }, 'ML, Spark', ['Cellule Data Engineering']),
     m('Fatima Hadj', 'Data Scientist', {
       'Python': [4, 3], 'Machine Learning': [3, 3], 'Deep Learning': [3, 3], 'NLP': [4, 3],
       'SQL': [2, 0], 'Spark': [1, 1], 'MLOps': [0, 2], 'Airflow': [0, 0],
       'Power BI': [0, 0], 'Data Governance': [1, 0], 'Statistiques': [3, 2], 'Cloud (GCP)': [1, 2],
-    }, 'NLP, Deep Learning'),
+    }, 'NLP, Deep Learning', ['Cellule Data Science']),
     m('Romain Guérin', 'Data Engineer', {
       'Python': [3, 2], 'Machine Learning': [1, 2], 'Deep Learning': [0, 1], 'NLP': [0, 0],
       'SQL': [4, 2], 'Spark': [3, 3], 'MLOps': [2, 3], 'Airflow': [3, 2],
       'Power BI': [1, 0], 'Data Governance': [2, 2], 'Statistiques': [1, 0], 'Cloud (GCP)': [3, 3],
-    }, 'MLOps, Cloud'),
+    }, 'MLOps, Cloud', ['Cellule Data Engineering']),
     m('Julie Marchand', 'Data Analyst', {
       'Python': [2, 2], 'Machine Learning': [1, 2], 'Deep Learning': [0, 1], 'NLP': [0, 0],
       'SQL': [3, 2], 'Spark': [1, 1], 'MLOps': [0, 0], 'Airflow': [0, 0],
       'Power BI': [4, 3], 'Data Governance': [3, 2], 'Statistiques': [3, 2], 'Cloud (GCP)': [1, 1],
-    }, 'Data Viz, Gouvernance'),
+    }, 'Data Viz, Gouvernance', ['Cellule Analytics']),
     m('Olivier Tanguy', 'ML Engineer', {
       'Python': [4, 3], 'Machine Learning': [3, 3], 'Deep Learning': [2, 3], 'NLP': [1, 2],
       'SQL': [2, 0], 'Spark': [2, 2], 'MLOps': [4, 3], 'Airflow': [2, 2],
       'Power BI': [0, 0], 'Data Governance': [1, 1], 'Statistiques': [2, 1], 'Cloud (GCP)': [3, 3],
-    }, 'Deep Learning, Cloud'),
+    }, 'Deep Learning, Cloud', ['Cellule Data Science', 'Cellule Data Engineering']),
     m('Salima Benali', 'Data Scientist Junior', {
       'Python': [2, 3], 'Machine Learning': [2, 3], 'Deep Learning': [1, 3], 'NLP': [1, 3],
       'SQL': [2, 1], 'Spark': [0, 2], 'MLOps': [0, 2], 'Airflow': [0, 1],
       'Power BI': [1, 1], 'Data Governance': [0, 1], 'Statistiques': [2, 2], 'Cloud (GCP)': [1, 3],
-    }, 'ML, NLP, Cloud'),
+    }, 'ML, NLP, Cloud', ['Cellule Data Science']),
     m('Éric Vidal', 'Responsable Data', {
       'Python': [1, 0], 'Machine Learning': [2, 1], 'Deep Learning': [1, 0], 'NLP': [1, 0],
       'SQL': [2, 0], 'Spark': [1, 0], 'MLOps': [1, 1], 'Airflow': [1, 0],
       'Power BI': [3, 2], 'Data Governance': [4, 3], 'Statistiques': [2, 1], 'Cloud (GCP)': [2, 2],
-    }, 'Gouvernance, Stratégie Data'),
+    }, 'Gouvernance, Stratégie Data', ['Cellule Analytics', 'Cellule Data Engineering']),
   ];
 
   const categories = {
@@ -372,225 +360,6 @@ function loadDataDemo() {
   return { members, categories };
 }
 
-/**
- * Tribu Value - coaching & transformation team demo.
- * @returns {Object} { members, categories }
- */
-function loadTribuValueDemo() {
-  const s = (l) => [l, 0]; // shorthand: level only, no appetence data
-
-  const members = [
-    m('Anthony Coulon', 'OKR', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(3),
-      'OKR Produit': s(4), 'OKR Orga': s(4), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(3),
-      'Accompagnement Équipes sur la valeur': s(3), 'Process d\'innovations': s(2),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(2),
-      'Change Management': s(2), 'Leadership': s(2), 'Communication (interne et externe)': s(3),
-      'Analyse Organisationnelle': s(3), 'Data / IA': s(2), 'Vision Produit': s(0),
-      'Management => valoriser la zone de génie des autres': s(0),
-      'Outcome Based Roadmap': s(0), 'Engagement Produit': s(0),
-    }),
-    m('Audrey Malvoisin', 'OKR, Leader de tribu', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(4),
-      'OKR Produit': s(4), 'OKR Orga': s(4), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(3),
-      'Accompagnement Équipes sur la valeur': s(2), 'Process d\'innovations': s(2),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(4),
-      'Change Management': s(3), 'Leadership': s(4), 'Communication (interne et externe)': s(2),
-      'Analyse Organisationnelle': s(3), 'Data / IA': s(0), 'Vision Produit': s(0),
-      'Management => valoriser la zone de génie des autres': s(0),
-      'Outcome Based Roadmap': s(0), 'Engagement Produit': s(0),
-    }),
-    m('Thomas Aubry', '', {
-      'Coaching Agile : framework / mindset': s(0), 'Facilitation': s(0), 'Conseil Stratégique': s(0),
-      'OKR Produit': s(0), 'OKR Orga': s(0), 'Lean Portfolio Management': s(0),
-      'Value Management Office': s(0), 'Accompagnement Équipes sur l\'engagement': s(0),
-      'Accompagnement Équipes sur la valeur': s(0), 'Process d\'innovations': s(0),
-      'Donner des formations': s(0), 'Mentoring': s(0), 'Coaching pro et indiv': s(0),
-      'Change Management': s(0), 'Leadership': s(0), 'Communication (interne et externe)': s(0),
-      'Analyse Organisationnelle': s(0), 'Data / IA': s(0), 'Vision Produit': s(0),
-      'Management => valoriser la zone de génie des autres': s(0),
-      'Outcome Based Roadmap': s(0), 'Engagement Produit': s(0),
-    }),
-    m('Délia Le Gac', 'Scrum Master', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(2),
-      'OKR Produit': s(3), 'OKR Orga': s(3), 'Lean Portfolio Management': s(2),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(4),
-      'Accompagnement Équipes sur la valeur': s(3), 'Process d\'innovations': s(4),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(3),
-      'Change Management': s(3), 'Leadership': s(3), 'Communication (interne et externe)': s(2),
-      'Analyse Organisationnelle': s(2), 'Data / IA': s(2), 'Vision Produit': s(3),
-      'Management => valoriser la zone de génie des autres': s(4),
-      'Outcome Based Roadmap': s(3), 'Engagement Produit': s(2),
-    }),
-    m('Jérémie Bohbot', 'Innovation', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(3),
-      'OKR Produit': s(1), 'OKR Orga': s(2), 'Lean Portfolio Management': s(2),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(3),
-      'Accompagnement Équipes sur la valeur': s(2), 'Process d\'innovations': s(4),
-      'Donner des formations': s(3), 'Mentoring': s(3), 'Coaching pro et indiv': s(3),
-      'Change Management': s(3), 'Leadership': s(2), 'Communication (interne et externe)': s(3),
-      'Analyse Organisationnelle': s(3), 'Data / IA': s(0), 'Vision Produit': s(0),
-      'Management => valoriser la zone de génie des autres': s(0),
-      'Outcome Based Roadmap': s(0), 'Engagement Produit': s(0),
-    }),
-    m('Delphine Igla', '', {
-      'Coaching Agile : framework / mindset': s(3), 'Facilitation': s(4), 'Conseil Stratégique': s(3),
-      'OKR Produit': s(1), 'OKR Orga': s(3), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(4),
-      'Accompagnement Équipes sur la valeur': s(3), 'Process d\'innovations': s(3),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(4),
-      'Change Management': s(4), 'Leadership': s(4), 'Communication (interne et externe)': s(3),
-      'Analyse Organisationnelle': s(2), 'Data / IA': s(1), 'Vision Produit': s(2),
-      'Management => valoriser la zone de génie des autres': s(3),
-      'Outcome Based Roadmap': s(2), 'Engagement Produit': s(1),
-    }),
-    m('Gabrielle Le Bihan', '', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(3),
-      'OKR Produit': s(3), 'OKR Orga': s(3), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(3),
-      'Accompagnement Équipes sur la valeur': s(2), 'Process d\'innovations': s(2),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(4),
-      'Change Management': s(3), 'Leadership': s(3), 'Communication (interne et externe)': s(2),
-      'Analyse Organisationnelle': s(3), 'Data / IA': s(2), 'Vision Produit': s(3),
-      'Management => valoriser la zone de génie des autres': s(4),
-      'Outcome Based Roadmap': s(2), 'Engagement Produit': s(2),
-    }),
-    m('Hao Lay', 'Scrum Master', {
-      'Coaching Agile : framework / mindset': s(3), 'Facilitation': s(3), 'Conseil Stratégique': s(2),
-      'OKR Produit': s(2), 'OKR Orga': s(2), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(2),
-      'Accompagnement Équipes sur la valeur': s(3), 'Process d\'innovations': s(2),
-      'Donner des formations': s(3), 'Mentoring': s(2), 'Coaching pro et indiv': s(1),
-      'Change Management': s(1), 'Leadership': s(1), 'Communication (interne et externe)': s(2),
-      'Analyse Organisationnelle': s(2), 'Data / IA': s(2), 'Vision Produit': s(3),
-      'Management => valoriser la zone de génie des autres': s(1),
-      'Outcome Based Roadmap': s(2), 'Engagement Produit': s(2),
-    }),
-    m('Mathilde Curien', 'Produit', {
-      'Coaching Agile : framework / mindset': s(3), 'Facilitation': s(3), 'Conseil Stratégique': s(3),
-      'OKR Produit': s(3), 'OKR Orga': s(3), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(2),
-      'Accompagnement Équipes sur la valeur': s(4), 'Process d\'innovations': s(1),
-      'Donner des formations': s(3), 'Mentoring': s(4), 'Coaching pro et indiv': s(2),
-      'Change Management': s(2), 'Leadership': s(2), 'Communication (interne et externe)': s(3),
-      'Analyse Organisationnelle': s(1), 'Data / IA': s(1), 'Vision Produit': s(4),
-      'Management => valoriser la zone de génie des autres': s(3),
-      'Outcome Based Roadmap': s(4), 'Engagement Produit': s(3),
-    }),
-    m('Marina Wiesel', 'Design', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(3),
-      'OKR Produit': s(4), 'OKR Orga': s(4), 'Lean Portfolio Management': s(2),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(3),
-      'Accompagnement Équipes sur la valeur': s(4), 'Process d\'innovations': s(4),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(3),
-      'Change Management': s(1), 'Leadership': s(3), 'Communication (interne et externe)': s(3),
-      'Analyse Organisationnelle': s(4), 'Data / IA': s(2), 'Vision Produit': s(4),
-      'Management => valoriser la zone de génie des autres': s(3),
-      'Outcome Based Roadmap': s(4), 'Engagement Produit': s(0),
-    }),
-    m('Laetitia Ribette', '', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(2),
-      'OKR Produit': s(3), 'OKR Orga': s(3), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(3),
-      'Accompagnement Équipes sur la valeur': s(3), 'Process d\'innovations': s(3),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(4),
-      'Change Management': s(3), 'Leadership': s(3), 'Communication (interne et externe)': s(0),
-      'Analyse Organisationnelle': s(0), 'Data / IA': s(2), 'Vision Produit': s(0),
-      'Management => valoriser la zone de génie des autres': s(0),
-      'Outcome Based Roadmap': s(0), 'Engagement Produit': s(0),
-    }),
-    m('Samy Amirou', 'LPM', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(3), 'Conseil Stratégique': s(3),
-      'OKR Produit': s(3), 'OKR Orga': s(3), 'Lean Portfolio Management': s(4),
-      'Value Management Office': s(3), 'Accompagnement Équipes sur l\'engagement': s(2),
-      'Accompagnement Équipes sur la valeur': s(4), 'Process d\'innovations': s(2),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(2),
-      'Change Management': s(3), 'Leadership': s(3), 'Communication (interne et externe)': s(3),
-      'Analyse Organisationnelle': s(4), 'Data / IA': s(3), 'Vision Produit': s(4),
-      'Management => valoriser la zone de génie des autres': s(3),
-      'Outcome Based Roadmap': s(3), 'Engagement Produit': s(2),
-    }),
-    m('Sébastien Rouen', 'Scrum Master, IA', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(2),
-      'OKR Produit': s(2), 'OKR Orga': s(2), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(4),
-      'Accompagnement Équipes sur la valeur': s(3), 'Process d\'innovations': s(2),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(1),
-      'Change Management': s(3), 'Leadership': s(3), 'Communication (interne et externe)': s(2),
-      'Analyse Organisationnelle': s(2), 'Data / IA': s(4), 'Vision Produit': s(3),
-      'Management => valoriser la zone de génie des autres': s(3),
-      'Outcome Based Roadmap': s(2), 'Engagement Produit': s(2),
-    }),
-    m('Valérie Capriata', '', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(3),
-      'OKR Produit': s(3), 'OKR Orga': s(2), 'Lean Portfolio Management': s(1),
-      'Value Management Office': s(1), 'Accompagnement Équipes sur l\'engagement': s(2),
-      'Accompagnement Équipes sur la valeur': s(2), 'Process d\'innovations': s(1),
-      'Donner des formations': s(4), 'Mentoring': s(4), 'Coaching pro et indiv': s(3),
-      'Change Management': s(2), 'Leadership': s(2), 'Communication (interne et externe)': s(3),
-      'Analyse Organisationnelle': s(3), 'Data / IA': s(2), 'Vision Produit': s(4),
-      'Management => valoriser la zone de génie des autres': s(3),
-      'Outcome Based Roadmap': s(3), 'Engagement Produit': s(2),
-    }),
-    m('Yves Convert', '', {
-      'Coaching Agile : framework / mindset': s(0), 'Facilitation': s(0), 'Conseil Stratégique': s(0),
-      'OKR Produit': s(0), 'OKR Orga': s(0), 'Lean Portfolio Management': s(0),
-      'Value Management Office': s(0), 'Accompagnement Équipes sur l\'engagement': s(0),
-      'Accompagnement Équipes sur la valeur': s(0), 'Process d\'innovations': s(0),
-      'Donner des formations': s(0), 'Mentoring': s(0), 'Coaching pro et indiv': s(0),
-      'Change Management': s(0), 'Leadership': s(0), 'Communication (interne et externe)': s(0),
-      'Analyse Organisationnelle': s(0), 'Data / IA': s(0), 'Vision Produit': s(0),
-      'Management => valoriser la zone de génie des autres': s(0),
-      'Outcome Based Roadmap': s(0), 'Engagement Produit': s(0),
-    }),
-    m('Aline Naval', 'Scrum Master', {
-      'Coaching Agile : framework / mindset': s(0), 'Facilitation': s(0), 'Conseil Stratégique': s(0),
-      'OKR Produit': s(0), 'OKR Orga': s(0), 'Lean Portfolio Management': s(0),
-      'Value Management Office': s(0), 'Accompagnement Équipes sur l\'engagement': s(0),
-      'Accompagnement Équipes sur la valeur': s(0), 'Process d\'innovations': s(0),
-      'Donner des formations': s(0), 'Mentoring': s(0), 'Coaching pro et indiv': s(0),
-      'Change Management': s(0), 'Leadership': s(0), 'Communication (interne et externe)': s(0),
-      'Analyse Organisationnelle': s(0), 'Data / IA': s(0), 'Vision Produit': s(0),
-      'Management => valoriser la zone de génie des autres': s(0),
-      'Outcome Based Roadmap': s(0), 'Engagement Produit': s(0),
-    }),
-    m('Caroline Lecavelier', 'Scrum Master', {
-      'Coaching Agile : framework / mindset': s(4), 'Facilitation': s(4), 'Conseil Stratégique': s(2),
-      'OKR Produit': s(2), 'OKR Orga': s(2), 'Lean Portfolio Management': s(3),
-      'Value Management Office': s(0), 'Accompagnement Équipes sur l\'engagement': s(2),
-      'Accompagnement Équipes sur la valeur': s(3), 'Process d\'innovations': s(0),
-      'Donner des formations': s(4), 'Mentoring': s(0), 'Coaching pro et indiv': s(3),
-      'Change Management': s(0), 'Leadership': s(0), 'Communication (interne et externe)': s(0),
-      'Analyse Organisationnelle': s(0), 'Data / IA': s(1), 'Vision Produit': s(2),
-      'Management => valoriser la zone de génie des autres': s(2),
-      'Outcome Based Roadmap': s(0), 'Engagement Produit': s(2),
-    }),
-  ];
-
-  const categories = {
-    'Coaching & Accompagnement': [
-      'Coaching Agile : framework / mindset', 'Facilitation', 'Mentoring',
-      'Coaching pro et indiv', 'Accompagnement Équipes sur l\'engagement',
-      'Accompagnement Équipes sur la valeur',
-    ],
-    'Stratégie & Valeur': [
-      'Conseil Stratégique', 'OKR Produit', 'OKR Orga',
-      'Lean Portfolio Management', 'Value Management Office', 'Outcome Based Roadmap',
-    ],
-    'Produit & Innovation': [
-      'Vision Produit', 'Engagement Produit', 'Process d\'innovations', 'Data / IA',
-    ],
-    'Leadership & Organisation': [
-      'Leadership', 'Communication (interne et externe)', 'Change Management',
-      'Analyse Organisationnelle', 'Management => valoriser la zone de génie des autres',
-      'Donner des formations',
-    ],
-  };
-
-  return { members, categories };
-}
 
 // ============================================================
 // Helper
@@ -602,12 +371,13 @@ function loadTribuValueDemo() {
  * @param {string} role - Member ownership (comma-separated)
  * @param {Object} skills - { skillName: [level, appetence] }
  * @param {string} [appetences=''] - Member appetences (free text)
+ * @param {string[]} [groups=[]] - Member groups (missions, tribus…)
  * @returns {Object} Member object
  */
-function m(name, role, skills, appetences = '') {
+function m(name, role, skills, appetences = '', groups = []) {
   const entries = {};
   for (const [skillName, [level, appetence]] of Object.entries(skills)) {
     entries[skillName] = createSkillEntry(level, appetence);
   }
-  return createMember({ name, role, appetences, skills: entries });
+  return createMember({ name, role, appetences, groups, skills: entries });
 }

@@ -77,12 +77,21 @@ export function parseImportData(text) {
   const headers = lines[0].split(delimiter).map(h => h.trim());
 
   if (headers.length < 4) {
-    errors.push('L\'en-tête doit contenir au moins : Nom, Ownership, Appétences, et une compétence.');
+    errors.push('L\'en-tête doit contenir au moins : Nom, Ownership, Appétences et une compétence (ou Groupes + une compétence).');
     return { members: [], skills: [], errors };
   }
 
-  // First three columns are always Name, Ownership, and Appétences
-  const skillNames = headers.slice(3);
+  // Detecter si la colonne 3 (index 3) est "Groupes"
+  const col3 = headers[3]?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') || '';
+  const hasGroupsCol = col3.startsWith('groupe');
+  const skillStart = hasGroupsCol ? 4 : 3;
+
+  if (headers.length <= skillStart) {
+    errors.push('L\'en-tête doit contenir au moins une compétence après les colonnes fixes.');
+    return { members: [], skills: [], errors };
+  }
+
+  const skillNames = headers.slice(skillStart);
   const members = [];
 
   // Parse data rows
@@ -91,6 +100,9 @@ export function parseImportData(text) {
     const name = cells[0] || '';
     const role = cells[1] || '';
     const appetences = cells[2] || '';
+    const groups = hasGroupsCol
+      ? (cells[3] || '').split(',').map(g => g.trim()).filter(Boolean)
+      : [];
 
     if (!name) {
       errors.push(`Ligne ${i + 1}: nom manquant, ligne ignorée.`);
@@ -99,12 +111,12 @@ export function parseImportData(text) {
 
     const skills = {};
     for (let j = 0; j < skillNames.length; j++) {
-      const cellValue = cells[j + 3] || '';
+      const cellValue = cells[j + skillStart] || '';
       const { level, appetence } = parseSkillCell(cellValue);
       skills[skillNames[j]] = createSkillEntry(level, appetence);
     }
 
-    members.push(createMember({ name, role, appetences, skills }));
+    members.push(createMember({ name, role, appetences, groups, skills }));
   }
 
   return { members, skills: skillNames, errors };
@@ -120,10 +132,10 @@ export function generateTemplate(skillNames = []) {
     ? skillNames
     : ['JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'SQL', 'Docker', 'Git'];
 
-  const header = ['Nom', 'Ownership', 'Appétences', ...defaultSkills].join(';');
-  const example1 = ['Jean Dupont', 'Développeur', 'IA, Cloud', ...defaultSkills.map((_, i) =>
+  const header = ['Nom', 'Ownership', 'Appétences', 'Groupes', ...defaultSkills].join(';');
+  const example1 = ['Jean Dupont', 'Développeur', 'IA, Cloud', 'Mission X, Tribu Data', ...defaultSkills.map(() =>
     `${Math.floor(Math.random() * 5)}/${Math.floor(Math.random() * 4)}`)].join(';');
-  const example2 = ['Marie Martin', 'Tech Lead', 'Architecture, DevOps', ...defaultSkills.map((_, i) =>
+  const example2 = ['Marie Martin', 'Tech Lead', 'Architecture, DevOps', 'Mission Y', ...defaultSkills.map(() =>
     `${Math.floor(Math.random() * 5)}/${Math.floor(Math.random() * 4)}`)].join(';');
 
   return [
