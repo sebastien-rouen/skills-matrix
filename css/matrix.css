@@ -53,6 +53,12 @@
   background: var(--color-primary-900);
 }
 
+.matrix-table thead th:nth-child(3) {
+  text-align: left;
+  min-width: 120px;
+  background: var(--color-primary-900);
+}
+
 /* --- Category Header Row --- */
 .matrix-table .category-row th {
   background: var(--color-primary-800);
@@ -61,6 +67,24 @@
   letter-spacing: 0.05em;
   padding: var(--space-1) var(--space-3);
   border-bottom: 1px solid var(--color-primary-700);
+}
+
+.matrix-table .category-row th.category-group {
+  border-left: 2px solid rgba(255, 255, 255, 0.25);
+  text-align: center;
+}
+
+.matrix-table .category-row th.category-group:first-of-type {
+  border-left: none;
+}
+
+/* --- Category column separator (skill header + body cells) --- */
+.matrix-table thead th.category-start {
+  border-left: 2px solid var(--color-primary-700);
+}
+
+.matrix-table tbody td.category-start {
+  border-left: 2px solid var(--color-border);
 }
 
 /* --- Body Cells --- */
@@ -404,4 +428,25 @@
 /* --- Column Highlight on Hover --- */
 .matrix-table th.col-highlight {
   background: var(--color-primary-700);
+}
+
+/* --- Share Mode : ligne du membre selectionne --- */
+.matrix-row--share-active {
+  background: rgba(59, 130, 246, 0.06);
+  outline: 2px solid var(--color-primary-400);
+  outline-offset: -1px;
+}
+
+.matrix-row--share-active .skill-cell {
+  cursor: pointer;
+}
+
+/* --- Share Mode : lignes des autres membres (lecture seule) --- */
+.matrix-row--share-locked .skill-cell {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.matrix-row--share-locked .editable-cell {
+  cursor: default;
 }

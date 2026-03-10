@@ -13,6 +13,7 @@ import {
   applyGroupsToMembers, SOURCE_TYPES, getSourceTypeLabel,
 } from '../services/api-source.js';
 import { toastSuccess, toastError, toastWarning, toastInfo } from '../components/toast.js';
+import { saveCustomTemplate } from '../services/templates.js';
 import { confirm, showModal } from '../components/modal.js';
 import { downloadFile, escapeHtml, debounce, generateId } from '../utils/helpers.js';
 
@@ -478,7 +479,17 @@ function bindSettingsEvents(container) {
       confirmClass: 'btn--primary',
       onConfirm: () => {
         updateCategories(newCats);
-        toastSuccess('Categories auto-generees.');
+        // Sauvegarder le template actif avec les nouvelles categories
+        const current = getState();
+        if (current.activeTemplate && !current.activeTemplate.builtIn) {
+          saveCustomTemplate({
+            title: current.activeTemplate.title,
+            description: current.activeTemplate.description || '',
+            members: current.members,
+            categories: newCats,
+          });
+        }
+        toastSuccess('Categories auto-generees et sauvegardees.');
       },
     });
   });

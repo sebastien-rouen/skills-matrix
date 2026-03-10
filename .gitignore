@@ -21,5 +21,8 @@ package-lock.json
 # Templates locaux (crees via l'app, non commites)
 templates/*.local.json
 
+# Liens de partage (donnees sensibles)
+shares.json
+
 # Logs
 *.log

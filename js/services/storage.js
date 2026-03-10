@@ -10,6 +10,8 @@ const STORAGE_KEY = 'skills-matrix-data';
  * @param {Object} state - The state object to persist
  */
 export function save(state) {
+  // Ne pas persister en localStorage en mode partage
+  if (state.shareMode) return;
   try {
     const serialized = JSON.stringify(state);
     localStorage.setItem(STORAGE_KEY, serialized);

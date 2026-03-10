@@ -3,10 +3,11 @@
  * Manages view switching and active state.
  */
 
-import { emit, getState, updateState, on } from '../state.js';
+import { emit, getState, updateState, on, isShareMode } from '../state.js';
 import { saveCustomTemplate } from '../services/templates.js';
+import { createShareLink, listShareLinks, revokeShareLink } from '../services/share.js';
 import { escapeHtml } from '../utils/helpers.js';
-import { toastSuccess } from './toast.js';
+import { toastSuccess, toastError, toastInfo } from './toast.js';
 
 /** @type {number|null} Debounce timer for auto-save */
 let autoSaveTimer = null;
@@ -43,7 +44,9 @@ export function renderSidebar(container) {
 
       <nav class="sidebar__nav">
         <div class="sidebar__section-label">Vues</div>
-        ${NAV_ITEMS.map(item => `
+        ${NAV_ITEMS
+          .filter(item => !isShareMode() || ['matrix', 'dashboard', 'radar'].includes(item.id))
+          .map(item => `
           <a class="sidebar__link ${item.id === activeView ? 'sidebar__link--active' : ''}"
              href="#${item.id}"
              data-view="${item.id}">
@@ -97,8 +100,9 @@ function bindEvents(container) {
  */
 export function navigateTo(viewId) {
   activeView = viewId;
-  // Update URL hash without triggering hashchange (we push silently)
-  history.pushState(null, '', '#' + viewId);
+  // Preserver les parametres de requete (ex: ?share=TOKEN) lors de la navigation
+  const search = window.location.search;
+  history.pushState(null, '', search + '#' + viewId);
   emit('view:changed', viewId);
   updateActiveLink();
 }
@@ -119,6 +123,13 @@ function updateActiveLink() {
 function updateTemplatePanel() {
   const panel = document.querySelector('#sidebar-template-panel');
   if (!panel) return;
+
+  // Masquer le panneau template en mode partage
+  if (isShareMode()) {
+    panel.innerHTML = '';
+    panel.style.display = 'none';
+    return;
+  }
 
   const state = getState();
   const tpl = state.activeTemplate;
@@ -154,6 +165,10 @@ function updateTemplatePanel() {
           </span>
           <span>Auto-sauvegarde</span>
         </label>
+        <button class="btn btn--sm sidebar__share-btn" id="sidebar-share-btn" title="Générer un lien de partage">
+          🔗 Partager
+        </button>
+        <div id="sidebar-share-links" class="sidebar__share-links"></div>
       `}
     </div>
   `;
@@ -164,6 +179,91 @@ function updateTemplatePanel() {
     updateState({ autoSaveTemplate: toggle.checked });
     if (toggle.checked) {
       toastSuccess('Auto-sauvegarde activée.');
+    }
+  });
+
+  // Bind share button : reutilise le lien existant ou en cree un nouveau
+  const shareBtn = panel.querySelector('#sidebar-share-btn');
+  shareBtn?.addEventListener('click', async () => {
+    // Verifier si un lien existe deja
+    const existing = await listShareLinks(tpl.id);
+    if (existing.length > 0) {
+      const shareUrl = `${window.location.origin}${window.location.pathname}?share=${existing[0].token}`;
+      await copyToClipboard(shareUrl);
+      toastInfo('Lien de partage copié !');
+      return;
+    }
+    // Sinon en creer un nouveau
+    const result = await createShareLink(tpl.id);
+    if (result.success) {
+      const shareUrl = `${window.location.origin}${window.location.pathname}?share=${result.token}`;
+      await copyToClipboard(shareUrl);
+      toastSuccess('Lien de partage créé et copié !');
+      loadShareLink(tpl.id);
+    } else {
+      toastError('Impossible de créer le lien de partage.');
+    }
+  });
+
+  // Charger le lien existant
+  if (!isBuiltIn) {
+    loadShareLink(tpl.id);
+  }
+}
+
+/**
+ * Copy text to clipboard.
+ * @param {string} text
+ */
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback pour les contextes non-securises
+    const input = document.createElement('input');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    input.remove();
+  }
+}
+
+/**
+ * Load and display the active share link for a template (max 1).
+ * @param {string} templateId
+ */
+async function loadShareLink(templateId) {
+  const container = document.querySelector('#sidebar-share-links');
+  if (!container) return;
+
+  const links = await listShareLinks(templateId);
+  if (links.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const link = links[0];
+  const date = new Date(link.createdAt).toLocaleDateString('fr-FR');
+  container.innerHTML = `
+    <div class="sidebar__share-item">
+      <span class="sidebar__share-date" title="Créé le ${date}">Lien actif · ${date}</span>
+      <button class="sidebar__share-copy" data-token="${escapeHtml(link.token)}" title="Copier le lien">📋</button>
+      <button class="sidebar__share-revoke" data-token="${escapeHtml(link.token)}" title="Révoquer">✕</button>
+    </div>
+  `;
+
+  container.querySelector('.sidebar__share-copy')?.addEventListener('click', async () => {
+    const url = `${window.location.origin}${window.location.pathname}?share=${link.token}`;
+    await copyToClipboard(url);
+    toastInfo('Lien copié !');
+  });
+
+  container.querySelector('.sidebar__share-revoke')?.addEventListener('click', async () => {
+    const ok = await revokeShareLink(link.token);
+    if (ok) {
+      toastSuccess('Lien de partage révoqué.');
+      loadShareLink(templateId);
     }
   });
 }

@@ -232,6 +232,30 @@ export function updateFilters(filters) {
 }
 
 /**
+ * Check if the app is in share mode.
+ * @returns {boolean}
+ */
+export function isShareMode() {
+  return !!state.shareMode;
+}
+
+/**
+ * Get the selected member name in share mode.
+ * @returns {string|null}
+ */
+export function getShareMemberName() {
+  return state.shareMemberName || null;
+}
+
+/**
+ * Get the share token.
+ * @returns {string|null}
+ */
+export function getShareToken() {
+  return state.shareToken || null;
+}
+
+/**
  * Reset the entire state to defaults.
  */
 export function resetState() {

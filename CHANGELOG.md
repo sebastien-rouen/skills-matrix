@@ -6,6 +6,36 @@ Toutes les modifications notables de Skills Matrix sont documentees ici.
 
 ## [Non publie] - 2026-03-10
 
+### Mode partage securise pour les membres de l'equipe
+
+- **Liens de partage** : generation de liens securises (token unique) pour permettre aux membres de remplir leurs competences.
+- **Sidebar identique** : en mode partage, la sidebar reste intacte visuellement ; seuls les liens Import et Parametres sont masques, et le panneau template est cache.
+- **Modale de selection** : a l'ouverture du lien, une modale propose au membre de selectionner son nom dans la liste. Un bandeau informatif s'affiche ensuite au-dessus des filtres de la matrice.
+- **Edition restreinte** : seul le membre selectionne peut editer sa propre ligne dans la matrice.
+- **Sauvegarde automatique** : les competences saisies sont sauvegardees sur le serveur via l'API (debounce 1.5s).
+- **Vues analytiques** : Dashboard et Radar accessibles en lecture seule en mode partage.
+- **Restrictions** : pas d'acces aux Parametres, Import, Export CSV, renommage de competences ou modification des autres membres.
+- **Gestion des liens** : bouton "Partager" dans la sidebar, liste des liens actifs avec copie et revocation.
+- **Securite** : tokens cryptographiques (base64url, 24 bytes), revocables manuellement, pas de persistence localStorage en mode partage.
+
+#### Fichiers crees
+- `js/services/share.js` - Service frontend pour la gestion des liens de partage
+- `js/components/share-bar.js` - Modale de selection du membre + bandeau informatif au-dessus des filtres + auto-save
+
+#### Fichiers modifies
+- `server.js` - 6 nouveaux endpoints API (`/api/share`, `/api/shares/:id`)
+- `js/app.js` - Detection du param `?share=TOKEN`, initialisation du mode partage
+- `js/state.js` - Ajout `isShareMode()`, `getShareMemberName()`, `getShareToken()`
+- `js/models/data.js` - Champs `shareMode`, `shareToken`, `shareMemberName` dans le state
+- `js/views/matrix.js` - Restriction edition a la ligne du membre selectionne, masquage exports
+- `js/components/sidebar.js` - Bouton "Partager", liste des liens actifs, copie/revocation
+- `js/services/storage.js` - Skip persistence localStorage en mode partage
+- `css/components.css` - Styles share-bar, selecteur membre, bouton/liens partage sidebar
+- `css/matrix.css` - Styles lignes actives/verrouillees en mode partage
+- `.gitignore` - Ajout `shares.json`
+
+---
+
 ### Renommage de competences, auto-categorisation enrichie, auto-save template
 
 - **Renommage inline** : clic sur le nom d'une competence dans la matrice pour la renommer (editeur positionne, Enter/Escape/blur).

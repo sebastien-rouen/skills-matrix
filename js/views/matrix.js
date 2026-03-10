@@ -3,7 +3,7 @@
  * Supports inline editing, sorting, and filtering.
  */
 
-import { getState, updateSkill, updateMember, renameSkill } from '../state.js';
+import { getState, updateSkill, updateMember, renameSkill, isShareMode, getShareMemberName } from '../state.js';
 import { getAllSkillNames, getAllRoles, isSkillCritical } from '../models/data.js';
 import { renderFilters, applyFilters } from '../components/filters.js';
 import { toastSuccess } from '../components/toast.js';
@@ -13,6 +13,7 @@ import {
 } from '../utils/helpers.js';
 import { exportCSV, exportDetailedCSV } from '../services/exporter.js';
 import { renderOnboarding } from '../components/onboarding.js';
+import { renderShareMemberBanner } from '../components/share-bar.js';
 
 /** @type {Object|null} Current sort configuration */
 let sortConfig = { key: null, ascending: true };
@@ -44,16 +45,23 @@ export function renderMatrixView(container) {
   // Group skills by category
   const groupedSkills = groupSkillsByCategory(filteredSkills, state.categories);
 
+  const inShareMode = isShareMode();
+  const shareMember = getShareMemberName();
+
   container.innerHTML = `
     <div class="page-header">
       <div>
         <h1 class="page-header__title">Matrice de compétences</h1>
-        <p class="page-header__subtitle">${state.members.length} membre(s) · ${allSkills.length} compétence(s)</p>
+        <p class="page-header__subtitle">${state.members.length} membre(s) · ${allSkills.length} compétence(s)${
+          inShareMode && shareMember ? ` · Édition : ${escapeHtml(shareMember)}` : ''
+        }</p>
       </div>
-      <div class="page-header__actions">
-        <button class="btn btn--secondary btn--sm" id="matrix-export-csv">📥 Export CSV</button>
-        <button class="btn btn--secondary btn--sm" id="matrix-export-detailed">📥 Export détaillé</button>
-      </div>
+      ${inShareMode ? '' : `
+        <div class="page-header__actions">
+          <button class="btn btn--secondary btn--sm" id="matrix-export-csv">📥 Export CSV</button>
+          <button class="btn btn--secondary btn--sm" id="matrix-export-detailed">📥 Export détaillé</button>
+        </div>
+      `}
     </div>
 
     <div id="matrix-filters"></div>
@@ -66,6 +74,11 @@ export function renderMatrixView(container) {
           <span>${l.label}</span>
         </div>
       `).join('')}
+      <div class="legend__separator"></div>
+      <div class="legend__item">
+        <span style="color: #FCA5A5; font-size: var(--font-size-base);">&#9888;</span>
+        <span>Critique (&lt; ${threshold} expert(s))</span>
+      </div>
     </div>
 
     <!-- Matrix Table -->
@@ -73,6 +86,17 @@ export function renderMatrixView(container) {
       ${renderTable(sortedMembers, groupedSkills, state)}
     </div>
   `;
+
+  // Afficher le bandeau membre en mode partage (au-dessus des filtres)
+  if (inShareMode && shareMember) {
+    renderShareMemberBanner(container.querySelector('#matrix-filters').parentElement);
+    // Repositionner le bandeau juste avant les filtres
+    const banner = container.querySelector('.share-member-banner');
+    const filtersEl = container.querySelector('#matrix-filters');
+    if (banner && filtersEl) {
+      filtersEl.parentElement.insertBefore(banner, filtersEl);
+    }
+  }
 
   // Render filters into the dedicated container
   renderFilters(container.querySelector('#matrix-filters'));
@@ -97,7 +121,9 @@ function renderEmptyState(container) {
  */
 function renderTable(members, groupedSkills, state) {
   const flatSkills = [];
+  const categoryStartSkills = new Set();
   for (const [, skills] of Object.entries(groupedSkills)) {
+    if (skills.length > 0) categoryStartSkills.add(skills[0]);
     flatSkills.push(...skills);
   }
 
@@ -113,7 +139,7 @@ function renderTable(members, groupedSkills, state) {
     html += '<thead><tr class="category-row">';
     html += '<th></th><th></th><th></th>';
     for (const [catName, skills] of catEntries) {
-      html += `<th colspan="${skills.length}" style="text-align: center;">${escapeHtml(catName)}</th>`;
+      html += `<th class="category-group" colspan="${skills.length}">${escapeHtml(catName)}</th>`;
     }
     html += '</tr>';
   } else {
@@ -146,7 +172,8 @@ function renderTable(members, groupedSkills, state) {
     const displayName = maxLen > 0 && skill.length > maxLen
       ? skill.substring(0, maxLen - 1) + '…'
       : skill;
-    html += `<th data-skill-header="${escapeHtml(skill)}">
+    const catStart = categoryStartSkills.has(skill) ? ' category-start' : '';
+    html += `<th class="${catStart}" data-skill-header="${escapeHtml(skill)}">
       <span class="skill-name" data-rename-skill="${escapeHtml(skill)}" style="cursor: pointer;" title="Cliquer pour renommer">
         ${escapeHtml(displayName)}${critical ? ' <span style="color: #FCA5A5;" title="Compétence critique">⚠</span>' : ''}
       </span>
@@ -158,9 +185,13 @@ function renderTable(members, groupedSkills, state) {
   html += '</tr></thead>';
 
   // Body rows
+  const shareMode = isShareMode();
+  const shareTarget = getShareMemberName();
   html += '<tbody>';
   for (const member of members) {
-    html += '<tr>';
+    const isShareTarget = shareMode && member.name === shareTarget;
+    const isShareLocked = shareMode && member.name !== shareTarget;
+    html += `<tr class="${isShareTarget ? 'matrix-row--share-active' : ''}${isShareLocked ? ' matrix-row--share-locked' : ''}">`;
     html += `<td>
       <div class="member-name editable-cell" data-member-id="${member.id}" data-field="name">
         <div class="member-avatar">${getInitials(member.name)}</div>
@@ -192,7 +223,8 @@ function renderTable(members, groupedSkills, state) {
       const appetence = entry?.appetence ?? 0;
       const appetenceIcon = getAppetenceIcon(appetence);
 
-      html += `<td>
+      const tdCatClass = categoryStartSkills.has(skill) ? ' class="category-start"' : '';
+      html += `<td${tdCatClass}>
         <div class="skill-cell skill-cell--level-${level}"
              data-member-id="${member.id}"
              data-skill="${escapeHtml(skill)}"
@@ -289,6 +321,14 @@ function getSortIndicator(key) {
  * @param {Object} state - Current state
  */
 function bindMatrixEvents(container, state) {
+  const inShareMode = isShareMode();
+  const shareMember = getShareMemberName();
+
+  // Trouver l'ID du membre selectionne en mode partage
+  const shareMemberId = inShareMode && shareMember
+    ? state.members.find(m => m.name === shareMember)?.id
+    : null;
+
   // Sort headers
   container.querySelectorAll('.sort-header').forEach(header => {
     header.addEventListener('click', () => {
@@ -306,54 +346,62 @@ function bindMatrixEvents(container, state) {
   container.querySelectorAll('.skill-cell').forEach(cell => {
     cell.addEventListener('click', (e) => {
       e.stopPropagation();
+      // En mode partage, seul le membre selectionne peut editer ses cellules
+      if (inShareMode) {
+        if (!shareMemberId || cell.dataset.memberId !== shareMemberId) return;
+      }
       openInlineEditor(cell, container);
     });
   });
 
   // Editable cells click → inline editors for name, role, appetences
-  container.querySelectorAll('.editable-cell').forEach(cell => {
-    cell.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const field = cell.dataset.field;
-      const memberId = cell.dataset.memberId;
-      if (field === 'name') {
-        openNameEditor(cell, memberId, container);
-      } else if (field === 'role') {
-        openChipEditor(cell, memberId, 'role', state, container);
-      } else if (field === 'groups') {
-        openGroupsEditor(cell, memberId, state, container);
-      }
+  // Desactive en mode partage
+  if (!inShareMode) {
+    container.querySelectorAll('.editable-cell').forEach(cell => {
+      cell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const field = cell.dataset.field;
+        const memberId = cell.dataset.memberId;
+        if (field === 'name') {
+          openNameEditor(cell, memberId, container);
+        } else if (field === 'role') {
+          openChipEditor(cell, memberId, 'role', state, container);
+        } else if (field === 'groups') {
+          openGroupsEditor(cell, memberId, state, container);
+        }
+      });
     });
-  });
 
-  // Clic sur le nom d'une competence → renommer
-  container.querySelectorAll('[data-rename-skill]').forEach(span => {
-    span.addEventListener('click', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const th = span.closest('th');
-      openSkillRenameEditor(th, span.dataset.renameSkill, container);
+    // Clic sur le nom d'une competence → renommer
+    container.querySelectorAll('[data-rename-skill]').forEach(span => {
+      span.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const th = span.closest('th');
+        openSkillRenameEditor(th, span.dataset.renameSkill, container);
+      });
     });
-  });
+  }
 
   // Close editor on outside click
   document.addEventListener('click', closeActiveEditor);
 
-  // Export buttons
-  const delimiter = state.settings?.csvDelimiter || ';';
-  container.querySelector('#matrix-export-csv')?.addEventListener('click', () => {
-    const csv = exportCSV(state.members, state.categories, delimiter);
-    downloadFile(csv, 'skills-matrix.csv');
-    toastSuccess('CSV exporté.');
-  });
+  // Export buttons (masques en mode partage)
+  if (!inShareMode) {
+    const delimiter = state.settings?.csvDelimiter || ';';
+    container.querySelector('#matrix-export-csv')?.addEventListener('click', () => {
+      const csv = exportCSV(state.members, state.categories, delimiter);
+      downloadFile(csv, 'skills-matrix.csv');
+      toastSuccess('CSV exporté.');
+    });
 
-  container.querySelector('#matrix-export-detailed')?.addEventListener('click', () => {
-    const threshold = state.settings?.criticalThreshold ?? 2;
-    const csv = exportDetailedCSV(state.members, state.categories, delimiter, threshold);
-    downloadFile(csv, 'skills-matrix-detailed.csv');
-    toastSuccess('CSV détaillé exporté.');
-  });
-
+    container.querySelector('#matrix-export-detailed')?.addEventListener('click', () => {
+      const threshold = state.settings?.criticalThreshold ?? 2;
+      const csv = exportDetailedCSV(state.members, state.categories, delimiter, threshold);
+      downloadFile(csv, 'skills-matrix-detailed.csv');
+      toastSuccess('CSV détaillé exporté.');
+    });
+  }
 }
 
 /**

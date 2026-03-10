@@ -211,5 +211,8 @@ export function createDefaultState() {
     },
     activeTemplate: null,
     autoSaveTemplate: true,
+    shareMode: false,
+    shareToken: null,
+    shareMemberName: null,
   };
 }

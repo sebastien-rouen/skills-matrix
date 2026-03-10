@@ -1,17 +1,20 @@
 /**
  * Application entry point.
  * Initializes state, renders the UI, and manages view routing.
+ * Supports share mode via ?share=TOKEN URL parameter.
  */
 
-import { initState, on, getState, replaceMembers, updateCategories } from './state.js';
+import { initState, on, getState, updateState, replaceMembers, updateCategories, isShareMode } from './state.js';
 import { renderSidebar, navigateTo, setAutoSavePaused } from './components/sidebar.js';
-import { initToasts } from './components/toast.js';
+import { initToasts, toastError } from './components/toast.js';
 import { renderMatrixView } from './views/matrix.js';
 import { renderDashboardView } from './views/dashboard.js';
 import { renderRadarView, destroyRadarChart } from './views/radar.js';
 import { renderImportView } from './views/import.js';
 import { renderSettingsView } from './views/settings.js';
 import { loadCustomTemplate } from './services/templates.js';
+import { getShareTokenFromURL, loadSharedTemplate, clearShareSession } from './services/share.js';
+import { showMemberSelectModal, initShareAutoSave } from './components/share-bar.js';
 
 /** @type {Object<string, Function>} View renderers mapped by view ID */
 const VIEW_RENDERERS = {
@@ -21,6 +24,9 @@ const VIEW_RENDERERS = {
   import: renderImportView,
   settings: renderSettingsView,
 };
+
+/** @type {string[]} Vues accessibles en mode partage */
+const SHARE_ALLOWED_VIEWS = ['matrix', 'dashboard', 'radar'];
 
 /** @type {string} Currently active view */
 let currentView = 'matrix';
@@ -59,22 +65,78 @@ async function reloadActiveTemplate() {
 }
 
 /**
+ * Initialize share mode from URL token.
+ * Loads the shared template data and configures restricted state.
+ * @returns {Promise<boolean>} true if share mode activated
+ */
+async function initShareMode() {
+  const token = getShareTokenFromURL();
+  if (!token) return false;
+
+  const data = await loadSharedTemplate(token);
+  if (!data) {
+    clearShareSession();
+    toastError('Ce lien de partage est invalide ou a été révoqué.');
+    return false;
+  }
+
+  // Creer les membres avec les donnees du template partage
+  const { createMember } = await import('./models/data.js');
+  const members = data.members.map(m => createMember({
+    name: m.name,
+    role: m.role,
+    appetences: m.appetences || '',
+    groups: m.groups || [],
+    skills: m.skills,
+  }));
+
+  // Configurer le state en mode partage
+  updateState({
+    members,
+    categories: data.categories || {},
+    shareMode: true,
+    shareToken: token,
+    shareMemberName: null,
+    activeTemplate: {
+      id: data.templateId,
+      title: data.title,
+      builtIn: false,
+      local: true,
+    },
+    autoSaveTemplate: false,
+  });
+
+  console.log('[App] Mode partage activé :', data.title);
+  return true;
+}
+
+/**
  * Initialize the application.
  * Sets up state, renders the initial UI, and subscribes to events.
  */
-function init() {
+async function init() {
   // Initialize toast notifications
   initToasts();
 
   // Initialize state from localStorage
   initState();
 
-  // Si un template actif existe, recharger depuis le fichier (travail collaboratif)
-  reloadActiveTemplate();
+  // Detecter le mode partage (?share=TOKEN)
+  const shareMode = await initShareMode();
 
-  // Render sidebar
+  // Afficher la sidebar (filtree en mode partage)
   const sidebarEl = document.getElementById('app-sidebar');
   if (sidebarEl) renderSidebar(sidebarEl);
+
+  if (shareMode) {
+    // Initialiser l'auto-save vers le serveur
+    initShareAutoSave();
+    // Afficher la modale de selection du membre
+    showMemberSelectModal();
+  } else {
+    // Mode normal : recharger le template actif (await pour eviter le cache localStorage)
+    await reloadActiveTemplate();
+  }
 
   // Subscribe to view change events
   on('view:changed', (viewId) => {
@@ -99,11 +161,15 @@ function init() {
     }
   });
 
-  // Determine initial view: URL hash > data check > default
+  // Determine initial view
   const hashView = getViewFromHash();
   const state = getState();
 
-  if (hashView) {
+  if (shareMode) {
+    // En mode partage, toujours commencer par la matrice
+    const validHash = hashView && SHARE_ALLOWED_VIEWS.includes(hashView);
+    navigateTo(validHash ? hashView : 'matrix');
+  } else if (hashView) {
     navigateTo(hashView);
   } else if (state.members.length === 0) {
     navigateTo('import');
@@ -118,6 +184,9 @@ function init() {
  */
 function switchView(viewId) {
   if (!VIEW_RENDERERS[viewId]) return;
+
+  // En mode partage, bloquer les vues interdites
+  if (isShareMode() && !SHARE_ALLOWED_VIEWS.includes(viewId)) return;
 
   // Cleanup previous view if needed
   if (currentView === 'radar') {
