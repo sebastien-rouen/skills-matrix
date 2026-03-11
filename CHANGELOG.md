@@ -4,6 +4,23 @@ Toutes les modifications notables de Skills Matrix sont documentees ici.
 
 ---
 
+## [Non publie] - 2026-03-11
+
+### Refactoring UI de la vue Parametres (categories et membres)
+
+- **Layout categories** : affichage en grille 2 colonnes (responsive 1 colonne sur mobile) avec classe `.settings-categories-grid`.
+- **Badges non categorisees** : les competences sans categorie affichent desormais deux actions distinctes — bouton "assigner" (modale de choix) et bouton de suppression, via la classe `.skill-uncategorized-badge`.
+- **Cards membres** : remplacement du tableau par une grille de cards en 3 colonnes (`.settings-member-card`), avec avatar, nom/role editables en place, appetences et groupes affichables avec badges.
+- **Helper `saveActiveTemplate()`** : sauvegarde immediate du template actif avant navigation pour eviter les ecrasements serveur.
+- **Import `closeModal`** : ajout de l'import depuis le composant modal.
+
+### Fichiers modifies
+
+- `css/components.css` (+184 lignes) - styles settings categories grid, members grid, skill badges, member cards
+- `js/views/settings.js` (+146/−78 lignes) - refactoring renderMemberCard, renderCategoryCard, helper saveActiveTemplate
+
+---
+
 ## [Non publie] - 2026-03-10
 
 ### Mode partage securise pour les membres de l'equipe

@@ -14,8 +14,27 @@ import {
 } from '../services/api-source.js';
 import { toastSuccess, toastError, toastWarning, toastInfo } from '../components/toast.js';
 import { saveCustomTemplate } from '../services/templates.js';
-import { confirm, showModal } from '../components/modal.js';
+import { confirm, showModal, closeModal } from '../components/modal.js';
 import { downloadFile, escapeHtml, debounce, generateId } from '../utils/helpers.js';
+
+// ============================================================
+// Helpers
+// ============================================================
+
+/**
+ * Save the active template to the server immediately.
+ * Prevents stale server data from overwriting local changes on reload.
+ */
+function saveActiveTemplate() {
+  const current = getState();
+  if (!current.activeTemplate || current.activeTemplate.builtIn) return;
+  saveCustomTemplate({
+    title: current.activeTemplate.title,
+    description: current.activeTemplate.description || '',
+    members: current.members,
+    categories: current.categories || {},
+  });
+}
 
 // ============================================================
 // Sections definition for summary navigation
@@ -124,10 +143,10 @@ function renderCategoryCard(state) {
 
   if (uncategorized.length > 0) {
     catHtml += `
-      <div style="padding: var(--space-3); background: var(--color-bg-tertiary); border-radius: var(--radius-lg); border: 1px dashed var(--color-border);">
+      <div class="settings-categories-grid__uncategorized" style="padding: var(--space-3); background: var(--color-bg-tertiary); border-radius: var(--radius-lg); border: 1px dashed var(--color-border);">
         <strong style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Non categorisees</strong>
         <div style="display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2);">
-          ${uncategorized.map(s => `<span class="badge badge--neutral skill-delete-badge" data-skill="${escapeHtml(s)}" title="Cliquer pour supprimer cette competence" style="cursor: pointer;">${escapeHtml(s)} <span style="opacity: 0.5; margin-left: 2px;">✕</span></span>`).join('')}
+          ${uncategorized.map(s => `<span class="badge badge--neutral skill-uncategorized-badge" data-skill="${escapeHtml(s)}"><span class="skill-move-btn" data-skill="${escapeHtml(s)}" title="Assigner a une categorie">${escapeHtml(s)}</span><button class="skill-delete-btn" data-skill="${escapeHtml(s)}" title="Supprimer cette competence">✕</button></span>`).join('')}
         </div>
       </div>
     `;
@@ -139,76 +158,71 @@ function renderCategoryCard(state) {
         <h3 class="card__title">Gestion des categories</h3>
         <button class="btn btn--secondary btn--sm" id="settings-auto-categorize">Auto-categoriser</button>
       </div>
-      <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+      <div class="settings-categories-grid">
         ${catHtml}
-        <div style="display: flex; gap: var(--space-2); margin-top: var(--space-2);">
-          <input type="text" class="form-input" id="settings-new-category" placeholder="Nouvelle categorie..." style="flex: 1; max-width: 250px;" />
-          <button class="btn btn--secondary btn--sm" id="settings-add-category">Ajouter</button>
-        </div>
+      </div>
+      <div style="display: flex; gap: var(--space-2); margin-top: var(--space-3);">
+        <input type="text" class="form-input" id="settings-new-category" placeholder="Nouvelle categorie..." style="flex: 1; max-width: 250px;" />
+        <button class="btn btn--secondary btn--sm" id="settings-add-category">Ajouter</button>
       </div>
     </div>
   `;
 }
 
 /**
- * Render the member management card with groups column.
+ * Render the member management card as a 2-column grid of cards.
  */
 function renderMemberCard(state) {
+  const membersHtml = state.members.map(m => {
+    const groupsStr = (m.groups || []).join(', ');
+    return `
+      <div class="settings-member-card" data-member-id="${m.id}">
+        <div class="settings-member-card__header">
+          <div class="settings-member-card__avatar">${escapeHtml(m.name.charAt(0))}</div>
+          <div class="settings-member-card__identity">
+            <span class="member-display settings-member-card__name" data-field="name">${escapeHtml(m.name)}</span>
+            <input class="form-input member-edit-input" data-field="name" type="text"
+                   value="${escapeHtml(m.name)}" style="display: none;" />
+            <span class="member-display settings-member-card__role" data-field="role">${escapeHtml(m.role)}</span>
+            <input class="form-input member-edit-input" data-field="role" type="text"
+                   value="${escapeHtml(m.role)}" style="display: none;" />
+          </div>
+          <div class="settings-member-card__actions">
+            <button class="btn btn--ghost btn--sm member-edit-btn" title="Modifier">✏️</button>
+            <button class="btn btn--ghost btn--sm member-save-btn" title="Enregistrer" style="display: none;">✅</button>
+            <button class="btn btn--ghost btn--sm member-cancel-btn" title="Annuler" style="display: none;">❌</button>
+            <button class="btn btn--ghost btn--sm member-delete-btn" title="Supprimer">🗑</button>
+          </div>
+        </div>
+        <div class="settings-member-card__fields">
+          <div class="settings-member-card__field">
+            <span class="settings-member-card__label">Appetences</span>
+            <span class="member-display" data-field="appetences">${escapeHtml(m.appetences || '—')}</span>
+            <input class="form-input member-edit-input" data-field="appetences" type="text"
+                   value="${escapeHtml(m.appetences)}" style="display: none;" />
+          </div>
+          <div class="settings-member-card__field">
+            <span class="settings-member-card__label">Groupes</span>
+            <span class="member-display" data-field="groups">
+              ${(m.groups || []).map(g => `<span class="badge badge--neutral" style="margin: 1px;">${escapeHtml(g)}</span>`).join(' ') || '<span style="color: var(--color-text-tertiary);">—</span>'}
+            </span>
+            <input class="form-input member-edit-input" data-field="groups" type="text"
+                   value="${escapeHtml(groupsStr)}" placeholder="Groupe1, Groupe2"
+                   style="display: none;" />
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
   return `
     <div class="card" id="settings-members" style="margin-bottom: var(--space-6);">
       <div class="card__header">
         <h3 class="card__title">Gestion des membres</h3>
         <span class="badge badge--info">${state.members.length} membre(s)</span>
       </div>
-      <div style="overflow-x: auto;">
-        <table style="width: 100%; font-size: var(--font-size-sm); border-collapse: collapse;">
-          <thead>
-            <tr style="background: var(--color-bg-tertiary);">
-              <th style="padding: 8px 12px; text-align: left; border-bottom: 2px solid var(--color-border);">Nom</th>
-              <th style="padding: 8px 12px; text-align: left; border-bottom: 2px solid var(--color-border);">Ownership</th>
-              <th style="padding: 8px 12px; text-align: left; border-bottom: 2px solid var(--color-border);">Appetences</th>
-              <th style="padding: 8px 12px; text-align: left; border-bottom: 2px solid var(--color-border);">Groupes</th>
-              <th style="padding: 8px 12px; text-align: center; width: 140px; border-bottom: 2px solid var(--color-border);">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${state.members.map(m => {
-              const groupsStr = (m.groups || []).join(', ');
-              return `
-              <tr data-member-id="${m.id}" style="border-bottom: 1px solid var(--color-border-light);">
-                <td style="padding: 8px 12px;">
-                  <span class="member-display" data-field="name">${escapeHtml(m.name)}</span>
-                  <input class="form-input member-edit-input" data-field="name" type="text"
-                         value="${escapeHtml(m.name)}" style="display: none; width: 100%; padding: 4px 8px;" />
-                </td>
-                <td style="padding: 8px 12px;">
-                  <span class="member-display" data-field="role">${escapeHtml(m.role)}</span>
-                  <input class="form-input member-edit-input" data-field="role" type="text"
-                         value="${escapeHtml(m.role)}" style="display: none; width: 100%; padding: 4px 8px;" />
-                </td>
-                <td style="padding: 8px 12px;">
-                  <span class="member-display" data-field="appetences">${escapeHtml(m.appetences)}</span>
-                  <input class="form-input member-edit-input" data-field="appetences" type="text"
-                         value="${escapeHtml(m.appetences)}" style="display: none; width: 100%; padding: 4px 8px;" />
-                </td>
-                <td style="padding: 8px 12px;">
-                  <span class="member-display" data-field="groups">
-                    ${(m.groups || []).map(g => `<span class="badge badge--neutral" style="margin: 1px;">${escapeHtml(g)}</span>`).join(' ') || '<span style="color: var(--color-text-tertiary);">—</span>'}
-                  </span>
-                  <input class="form-input member-edit-input" data-field="groups" type="text"
-                         value="${escapeHtml(groupsStr)}" placeholder="Groupe1, Groupe2"
-                         style="display: none; width: 100%; padding: 4px 8px;" />
-                </td>
-                <td style="padding: 8px 12px; text-align: center; white-space: nowrap;">
-                  <button class="btn btn--ghost btn--sm member-edit-btn" title="Modifier">✏️</button>
-                  <button class="btn btn--ghost btn--sm member-save-btn" title="Enregistrer" style="display: none;">✅</button>
-                  <button class="btn btn--ghost btn--sm member-cancel-btn" title="Annuler" style="display: none;">❌</button>
-                  <button class="btn btn--ghost btn--sm member-delete-btn" title="Supprimer">🗑</button>
-                </td>
-              </tr>
-            `;}).join('')}
-          </tbody>
-        </table>
+      <div class="settings-members-grid">
+        ${membersHtml}
       </div>
     </div>
   `;
@@ -502,6 +516,7 @@ function bindSettingsEvents(container) {
     const cats = { ...state.categories };
     if (!cats[name]) cats[name] = [];
     updateCategories(cats);
+    saveActiveTemplate();
     input.value = '';
     toastSuccess(`Categorie "${name}" ajoutee.`);
   });
@@ -513,6 +528,7 @@ function bindSettingsEvents(container) {
       const cats = { ...state.categories };
       delete cats[catName];
       updateCategories(cats);
+      saveActiveTemplate();
       toastSuccess(`Categorie "${catName}" supprimee.`);
     });
   });
@@ -543,6 +559,7 @@ function bindSettingsEvents(container) {
         return m;
       });
       replaceMembers(members);
+      saveActiveTemplate();
 
       toastSuccess(`Competence « ${skillName} » ajoutee dans ${catName}.`);
     });
@@ -569,21 +586,70 @@ function bindSettingsEvents(container) {
         cats[catName] = cats[catName].filter(s => s !== skillName);
         if (cats[catName].length === 0) delete cats[catName];
         updateCategories(cats);
+        saveActiveTemplate();
         toastSuccess(`« ${skillName} » retire de ${catName}.`);
       }
     });
   });
 
-  // Supprimer une competence non categorisee (clic sur le badge)
-  container.querySelectorAll('.skill-delete-badge').forEach(badge => {
-    badge.addEventListener('click', async () => {
-      const skillName = badge.dataset.skill;
+  // Assigner une competence non categorisee a une categorie (clic sur le texte)
+  container.querySelectorAll('.skill-move-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const skillName = btn.dataset.skill;
+      const state = getState();
+      const cats = Object.keys(state.categories || {});
+
+      if (cats.length === 0) {
+        toastWarning('Aucune categorie disponible. Creez-en une d\'abord.');
+        return;
+      }
+
+      const optionsHtml = cats.map(c =>
+        `<button class="btn btn--secondary btn--sm cat-assign-btn" data-category="${escapeHtml(c)}">${escapeHtml(c)}</button>`
+      ).join('');
+
+      const backdrop = showModal({
+        title: `Assigner « ${skillName} »`,
+        body: `
+          <p style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--space-3);">
+            Choisissez la categorie de destination :
+          </p>
+          <div class="cat-assign-list">${optionsHtml}</div>
+        `,
+        confirmLabel: 'Annuler',
+        confirmClass: 'btn--ghost',
+        onConfirm: () => {},
+      });
+
+      backdrop.querySelectorAll('.cat-assign-btn').forEach(catBtn => {
+        catBtn.addEventListener('click', () => {
+          const catName = catBtn.dataset.category;
+          const current = getState();
+          const updated = { ...current.categories };
+          if (!updated[catName].includes(skillName)) {
+            updated[catName] = [...updated[catName], skillName];
+            updateCategories(updated);
+            saveActiveTemplate();
+            toastSuccess(`« ${skillName} » assignee a "${catName}".`);
+          }
+          closeModal();
+        });
+      });
+    });
+  });
+
+  // Supprimer une competence non categorisee (clic sur ✕)
+  container.querySelectorAll('.skill-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const skillName = btn.dataset.skill;
       const confirmed = await confirm(
         'Supprimer la competence',
         `Supprimer « ${skillName} » de tous les membres ? Cette action est irreversible.`
       );
       if (!confirmed) return;
       removeSkill(skillName);
+      saveActiveTemplate();
       toastSuccess(`Competence « ${skillName} » supprimee.`);
     });
   });
@@ -591,24 +657,24 @@ function bindSettingsEvents(container) {
   // --- Member management ---
   container.querySelectorAll('.member-edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const row = btn.closest('tr');
-      row.querySelectorAll('.member-display').forEach(el => el.style.display = 'none');
-      row.querySelectorAll('.member-edit-input').forEach(el => el.style.display = '');
-      row.querySelector('.member-edit-btn').style.display = 'none';
-      row.querySelector('.member-delete-btn').style.display = 'none';
-      row.querySelector('.member-save-btn').style.display = '';
-      row.querySelector('.member-cancel-btn').style.display = '';
+      const card = btn.closest('.settings-member-card');
+      card.querySelectorAll('.member-display').forEach(el => el.style.display = 'none');
+      card.querySelectorAll('.member-edit-input').forEach(el => el.style.display = '');
+      card.querySelector('.member-edit-btn').style.display = 'none';
+      card.querySelector('.member-delete-btn').style.display = 'none';
+      card.querySelector('.member-save-btn').style.display = '';
+      card.querySelector('.member-cancel-btn').style.display = '';
     });
   });
 
   container.querySelectorAll('.member-save-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const row = btn.closest('tr');
-      const memberId = row.dataset.memberId;
-      const name = row.querySelector('.member-edit-input[data-field="name"]').value.trim();
-      const role = row.querySelector('.member-edit-input[data-field="role"]').value.trim();
-      const appetences = row.querySelector('.member-edit-input[data-field="appetences"]').value.trim();
-      const groupsRaw = row.querySelector('.member-edit-input[data-field="groups"]').value.trim();
+      const card = btn.closest('.settings-member-card');
+      const memberId = card.dataset.memberId;
+      const name = card.querySelector('.member-edit-input[data-field="name"]').value.trim();
+      const role = card.querySelector('.member-edit-input[data-field="role"]').value.trim();
+      const appetences = card.querySelector('.member-edit-input[data-field="appetences"]').value.trim();
+      const groupsRaw = card.querySelector('.member-edit-input[data-field="groups"]').value.trim();
       const groups = groupsRaw ? groupsRaw.split(',').map(g => g.trim()).filter(Boolean) : [];
 
       if (!name) {
@@ -617,6 +683,7 @@ function bindSettingsEvents(container) {
       }
 
       updateMember(memberId, { name, role, appetences, groups });
+      saveActiveTemplate();
       toastSuccess(`Membre "${name}" mis a jour.`);
     });
   });
@@ -627,9 +694,9 @@ function bindSettingsEvents(container) {
 
   container.querySelectorAll('.member-delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const row = btn.closest('tr');
-      const memberId = row.dataset.memberId;
-      const name = row.querySelector('.member-display[data-field="name"]').textContent;
+      const card = btn.closest('.settings-member-card');
+      const memberId = card.dataset.memberId;
+      const name = card.querySelector('.member-display[data-field="name"]').textContent;
 
       const confirmed = await confirm(
         'Supprimer le membre',
@@ -638,6 +705,7 @@ function bindSettingsEvents(container) {
       if (!confirmed) return;
 
       removeMember(memberId);
+      saveActiveTemplate();
       toastSuccess(`Membre "${name}" supprime.`);
     });
   });
