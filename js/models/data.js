@@ -15,7 +15,7 @@ import { generateId, clamp } from '../utils/helpers.js';
  * @param {Object} [props.skills={}] - Skills map { skillName: { level, appetence } }
  * @returns {Object} Member object with generated ID
  */
-export function createMember({ name, role = '', appetences = '', groups = [], skills = {} } = {}) {
+export function createMember({ name, role = '', appetences = '', groups = [], skills = {}, lastUpdated = null } = {}) {
   return {
     id: generateId(),
     name: name?.trim() || 'Sans nom',
@@ -23,6 +23,7 @@ export function createMember({ name, role = '', appetences = '', groups = [], sk
     appetences: appetences?.trim() || '',
     groups: Array.isArray(groups) ? groups.map(g => g.trim()).filter(Boolean) : [],
     skills: { ...skills },
+    lastUpdated: lastUpdated || null,
   };
 }
 
@@ -209,6 +210,7 @@ export function createDefaultState() {
       skillNameMaxLength: 12,
       csvDelimiter: ';',
     },
+    objectives: {},
     activeTemplate: null,
     autoSaveTemplate: true,
     shareMode: false,

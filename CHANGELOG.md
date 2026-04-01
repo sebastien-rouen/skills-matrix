@@ -4,6 +4,82 @@ Toutes les modifications notables de Skills Matrix sont documentees ici.
 
 ---
 
+## [Non publie] - 2026-04-02
+
+### 5 nouvelles fonctionnalites utilisateur
+
+#### Plan de developpement individuel
+
+- **Section Dashboard** : selecteur de membre pour afficher un plan de developpement personnalise.
+- **Algorithme de recommandation** : identifie les competences a developper en priorite selon la criticite, l'appetence et le niveau actuel.
+- **Mentors suggerees** : pour chaque recommandation, affiche les mentors internes (Confirme/Expert).
+- **Cartes visuelles** : grille de cards avec niveau actuel -> cible, priorite (Haute/Moyenne/Basse), et raison.
+
+#### Recherche globale rapide (Ctrl+K)
+
+- **Palette de commandes** : overlay accessible via Ctrl+K (ou Cmd+K) depuis n'importe quel ecran.
+- **Recherche multi-type** : membres, competences, categories, vues navigables.
+- **Navigation clavier** : fleches haut/bas, Entree pour selectionner, Echap pour fermer.
+- **Resultats groupes** : affichage par type avec icones et descriptions.
+
+#### Vue Objectifs d'equipe
+
+- **Parametres > Objectifs** : interface pour definir des cibles (nombre minimum de Confirmes/Experts) par competence.
+- **Dashboard** : section avec barres de progression vers les objectifs, compteur global d'objectifs atteints.
+- **Persistance** : les objectifs sont sauvegardes dans le state et le template actif.
+
+#### Raccourcis clavier dans la matrice
+
+- **Navigation par fleches** : deplacement cellule par cellule (haut/bas/gauche/droite) dans la matrice.
+- **Entree** : ouvre l'editeur inline sur la cellule focalisee.
+- **Echap** : quitte le mode navigation clavier.
+- **Focus visuel** : contour bleu + ombre sur la cellule active.
+
+#### Indicateur derniere mise a jour par membre
+
+- **Champ `lastUpdated`** : horodatage automatique a chaque modification de competence.
+- **Affichage relatif** : "il y a 5 min", "il y a 2h", "il y a 3j" sous le nom du membre dans la matrice.
+- **Helper `timeAgo()`** : fonction utilitaire pour le formatage temporel relatif en francais.
+
+### Fichiers crees
+
+- `js/components/command-palette.js` — Palette de recherche (Ctrl+K)
+
+### Fichiers modifies
+
+- `js/app.js` — Import et init de la palette de commandes
+- `js/state.js` — Timestamp `lastUpdated` sur `updateSkill()`
+- `js/models/data.js` — Champ `lastUpdated` dans `createMember()`, champ `objectives` dans `createDefaultState()`
+- `js/utils/helpers.js` — Fonction `timeAgo()`
+- `js/views/matrix.js` — Affichage `lastUpdated`, navigation clavier (fleches/Entree/Echap), cleanup
+- `js/views/dashboard.js` — Section objectifs, plan de developpement individuel, `bindDashboardEvents()`
+- `js/views/settings.js` — Section objectifs (ajout/modification/suppression de cibles par competence)
+- `js/components/sidebar.js` — (inchange, importe par command-palette)
+- `css/matrix.css` — Styles `.member-last-updated`, `.skill-cell--focused`
+- `css/components.css` — Styles objectifs settings, palette de commandes
+- `css/charts.css` — Styles plan de developpement, objectifs dashboard
+
+---
+
+## [Non publie] - 2026-03-20
+
+### Édition du référentiel en mode partage
+
+- **Vue "Référentiel"** : les personnes avec un lien partagé peuvent désormais accéder à une vue allégée "Paramètres" (sidebar label "Référentiel") pour modifier catégories et compétences.
+- **Auto-save catégories** : chaque modification de catégorie/compétence en mode partage est immédiatement sauvegardée sur le serveur via `PUT /api/share/:token/categories`.
+- **Backend** : nouvel endpoint `PUT /api/share/:token/categories` dans `bdd/server.js`.
+- **Sidebar** : l'entrée "Paramètres" s'affiche sous le label "Référentiel" en mode partage.
+
+### Fichiers modifiés
+
+- `bdd/server.js` — endpoint `PUT /api/share/:token/categories`
+- `js/services/share.js` — fonction `saveSharedCategories()`
+- `js/app.js` — `settings` ajouté à `SHARE_ALLOWED_VIEWS`
+- `js/components/sidebar.js` — filtre et label adaptatifs en mode partage
+- `js/views/settings.js` — `renderShareReferentielView()`, `saveActiveTemplate()` asynchrone + mode partage
+
+---
+
 ## [Non publie] - 2026-03-11
 
 ### Refactoring UI de la vue Parametres (categories et membres)

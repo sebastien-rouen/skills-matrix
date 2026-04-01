@@ -16,9 +16,16 @@
 
 /* --- Criticality Section --- */
 .criticality-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
   gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+@media (max-width: 768px) {
+  .criticality-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .criticality-item {
@@ -38,8 +45,8 @@
 .criticality-item__name {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
-  width: 220px;
-  min-width: 220px;
+  width: 140px;
+  min-width: 100px;
   flex-shrink: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -163,8 +170,8 @@
 .alert-group__items {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: 0 var(--space-3) var(--space-3);
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2);
 }
 
 .alert-card {
@@ -411,7 +418,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-2);
   flex-shrink: 0;
 }
 
@@ -420,9 +427,8 @@
   font-weight: var(--font-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
   white-space: nowrap;
+  writing-mode: horizontal-tb;
 }
 
 .training-card__urgency--critical { color: #DC2626; }
@@ -433,16 +439,20 @@
 
 .training-card__body {
   flex: 1;
-  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
   min-width: 0;
 }
 
 .training-card__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  margin-bottom: 0;
 }
 
 .training-card__skill {
@@ -1330,10 +1340,16 @@
 
 /* --- Mentoring Opportunities Section --- */
 .mentoring-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--space-3);
   padding: 0 var(--space-5) var(--space-5);
+}
+
+@media (max-width: 768px) {
+  .mentoring-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .mentoring-card {
@@ -1523,6 +1539,397 @@
     border-left: 1px solid var(--color-border-light);
     padding-top: 0;
     padding-left: var(--space-5);
+  }
+}
+
+/* --- Plan de développement individuel --- */
+
+/* Picker membre */
+.dev-plan-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-4);
+}
+
+.dev-plan-picker__label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.dev-plan-picker__select {
+  max-width: 280px;
+}
+
+/* Empty state */
+.dev-plan-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+}
+
+.dev-plan-empty-state__icon {
+  font-size: 2rem;
+  opacity: 0.6;
+}
+
+.dev-plan-empty-state__text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  max-width: 340px;
+}
+
+/* Profil résumé du membre */
+.dev-plan-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  margin: 0 var(--space-5) var(--space-4);
+  background: linear-gradient(135deg, var(--color-primary-50) 0%, #F0F9FF 100%);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-primary-200);
+}
+
+.dev-plan-profile__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-500);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+}
+
+.dev-plan-profile__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dev-plan-profile__name {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+}
+
+.dev-plan-profile__role {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.dev-plan-profile__stats {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.dev-plan-profile__stat {
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-semibold);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.dev-plan-profile__stat--expert {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.dev-plan-profile__stat--confirmed {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.dev-plan-profile__stat--appetence {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.dev-plan-profile__score {
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.dev-plan-profile__score-value {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-600);
+  line-height: 1;
+}
+
+.dev-plan-profile__score-label {
+  font-size: 0.6rem;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Liste des recommandations */
+.dev-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+.dev-plan-card {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
+  overflow: hidden;
+  transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.dev-plan-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* Numéro de rang à gauche */
+.dev-plan-card__rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  flex-shrink: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.02);
+  border-right: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Corps de la card */
+.dev-plan-card__body {
+  flex: 1;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.dev-plan-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.dev-plan-card__skill {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dev-plan-card__priority {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Barre de progression niveau */
+.dev-plan-card__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dev-plan-card__progress-track {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.06);
+  overflow: visible;
+}
+
+.dev-plan-card__progress-current {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+}
+
+.dev-plan-card__progress-target {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 10px;
+  background: var(--color-text-primary);
+  border-radius: 1px;
+  opacity: 0.3;
+}
+
+.dev-plan-card__progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--color-text-tertiary);
+}
+
+.dev-plan-card__progress-arrow {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+/* Footer : raison + badge mentor */
+.dev-plan-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.dev-plan-card__reason {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dev-plan-card__mentor-badge {
+  font-size: 0.6rem;
+  font-weight: var(--font-weight-semibold);
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: #E0E7FF;
+  color: #3730A3;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dev-plan-card__mentor-badge--none {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+/* Mentors */
+.dev-plan-card__mentors {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-top: var(--space-1);
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.dev-plan-card__mentor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 2px 8px 2px 2px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.dev-plan-card__mentor-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .dev-plan-profile {
+    flex-wrap: wrap;
+    margin: 0 var(--space-3) var(--space-3);
+  }
+  .dev-plan-profile__stats { width: 100%; }
+  .dev-plan-profile__score { margin-left: auto; }
+  .dev-plan-list { padding: 0 var(--space-3) var(--space-3); }
+  .dev-plan-card__rank { width: 28px; font-size: var(--font-size-sm); }
+}
+
+/* --- Objectifs d'équipe --- */
+.objectives-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+.objective-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.objective-row__info {
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.objective-row__skill {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.objective-row__target {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.objective-row__bar {
+  flex: 1;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+  overflow: hidden;
+}
+
+.objective-row__bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+}
+
+.objective-row__badge {
+  flex-shrink: 0;
+  min-width: 56px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .objective-row {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .objective-row__info {
+    min-width: 100%;
+  }
+  .objective-row__bar {
+    flex: 1;
+    min-width: 60%;
   }
 }
 

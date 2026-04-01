@@ -3,7 +3,29 @@
  */
 
 import { getState } from '../state.js';
-import { getAllSkillNames, getAllGroups, getSkillStats, isSkillCritical } from '../models/data.js';
+import { getAllSkillNames, getAllGroups, getSkillStats as _getSkillStats, isSkillCritical } from '../models/data.js';
+
+// ── Memoïzation getSkillStats ─────────────────────────────────────────────────
+// Évite de recalculer les stats pour chaque compétence à chaque sous-fonction.
+// Le cache est invalidé à chaque rendu (référence members change).
+let _statsCacheRef = null;
+const _statsCache = new Map();
+
+/**
+ * Version mémoïsée de getSkillStats — O(1) après le premier appel par compétence/rendu.
+ * @param {Object[]} members
+ * @param {string} skill
+ */
+function getSkillStats(members, skill) {
+  if (_statsCacheRef !== members) {
+    _statsCache.clear();
+    _statsCacheRef = members;
+  }
+  if (!_statsCache.has(skill)) {
+    _statsCache.set(skill, _getSkillStats(members, skill));
+  }
+  return _statsCache.get(skill);
+}
 import { escapeHtml, average, getSkillLabel, SKILL_LEVELS } from '../utils/helpers.js';
 import { getDemoScenarios } from '../services/demos.js';
 import { renderOnboarding } from '../components/onboarding.js';
@@ -43,6 +65,9 @@ export function renderDashboardView(container) {
     <!-- Team Overview Rings -->
     ${renderTeamOverview(state.members, allSkills, criticalSkills)}
 
+    <!-- Objectifs d'équipe -->
+    ${renderObjectivesSection(state.members, allSkills, state.objectives || {}, threshold)}
+
     <div class="dashboard-grid">
       <!-- Alerts -->
       <div class="card">
@@ -63,6 +88,7 @@ export function renderDashboardView(container) {
           <h3 class="card__title">Priorités de formation</h3>
         </div>
         ${renderTrainingTable(trainingPriorities)}
+        ${renderAppetenceAlerts(state.members, allSkills)}
       </div>
     </div>
 
@@ -95,7 +121,12 @@ export function renderDashboardView(container) {
         ${renderCriticalityBars(state.members, allSkills, threshold)}
       </div>
     </div>
+
+    <!-- Plans de développement individuels -->
+    ${renderDevPlansSection(state.members, allSkills, threshold)}
   `;
+
+  bindDashboardEvents(container, state.members, allSkills, threshold);
 }
 
 /**
@@ -162,7 +193,7 @@ function renderKpiCards(members, allSkills, criticalSkills, avgCoverage, categor
           <div class="kpi-card__label">Membres</div>
         </div>
         <div class="dashboard-popin__content">
-          <div class="dashboard-popin__title">Composition de l'equipe</div>
+          <div class="dashboard-popin__title">Composition de l'équipe</div>
           <div class="dashboard-popin__desc">Répartition par ownership</div>
           <div class="dashboard-popin__list">${roleRows}</div>
           <div class="dashboard-popin__divider"></div>
@@ -343,7 +374,7 @@ function renderBusFactorKpi(members, allSkills) {
       </div>
       <div class="dashboard-popin__content">
         <div class="dashboard-popin__title">Single Point of Failure</div>
-        <div class="dashboard-popin__desc">Competences avec exactement 1 seul Confirme/Expert</div>
+        <div class="dashboard-popin__desc">Compétences avec exactement 1 seul Confirmé/Expert</div>
         ${singlePoints.length > 0 ? `
           <div class="dashboard-popin__list">
             ${singlePoints.slice(0, 6).map(sp => `
@@ -446,13 +477,16 @@ function renderAlerts(members, skills, threshold = 2) {
     }
   }
 
-  if (criticals.length === 0 && warnings.length === 0 && infos.length === 0) {
-    return `
-      <div class="alerts-empty">
-        <div class="alerts-empty__icon">✅</div>
-        <div class="alerts-empty__text">Aucune alerte - toutes les compétences sont bien couvertes.</div>
-      </div>
-    `;
+  if (criticals.length === 0 && warnings.length === 0) {
+    if (infos.length === 0) {
+      return `
+        <div class="alerts-empty">
+          <div class="alerts-empty__icon">✅</div>
+          <div class="alerts-empty__text">Aucune alerte - toutes les compétences sont bien couvertes.</div>
+        </div>
+      `;
+    }
+    return '';
   }
 
   let html = '';
@@ -518,41 +552,55 @@ function renderAlerts(members, skills, threshold = 2) {
     `;
   }
 
-  // Info alerts
-  if (infos.length > 0) {
-    html += `
-      <div class="alert-group alert-group--info">
-        <div class="alert-group__header">
-          <span class="alert-group__icon">💡</span>
-          <span class="alert-group__title">Risque appétence</span>
-          <span class="alert-group__count">${infos.length}</span>
-        </div>
-        <div class="alert-group__desc">Aucune appétence forte - risque de perte de compétence</div>
-        <div class="alert-group__items">
-          ${infos.slice(0, 4).map(a => {
-            const pct = (a.avgLevel / 4) * 100;
-            return `
-            <div class="alert-card alert-card--info">
-              <div class="alert-card__header">
-                <span class="alert-card__skill">${escapeHtml(a.skill)}</span>
-                <span class="alert-card__badge badge badge--info">Couv. ${a.coverage.toFixed(0)}%</span>
-              </div>
-              <div class="alert-card__level-gauge">
-                <span class="alert-card__level-label">Niveau moy.</span>
-                <div class="alert-card__level-track">
-                  <div class="alert-card__level-fill" style="width: ${pct.toFixed(0)}%;"></div>
-                  <span class="alert-card__level-value">${a.avgLevel.toFixed(1)}</span>
-                </div>
-                <span class="alert-card__level-max">/4</span>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>
-    `;
-  }
-
   return html;
+}
+
+/**
+ * Render the appetence risk alert group (info level).
+ * @param {Object[]} members - All members
+ * @param {string[]} skills - All skill names
+ * @returns {string} HTML
+ */
+function renderAppetenceAlerts(members, skills) {
+  const infos = [];
+  for (const skill of skills) {
+    const stats = getSkillStats(members, skill);
+    if (stats.highAppetenceCount === 0 && stats.levels.slice(1).some(c => c > 0)) {
+      infos.push({ skill, avgLevel: stats.avgLevel, coverage: stats.coverage });
+    }
+  }
+  if (infos.length === 0) return '';
+
+  return `
+    <div class="alert-group alert-group--info" style="margin-top: var(--space-4);">
+      <div class="alert-group__header">
+        <span class="alert-group__icon">💡</span>
+        <span class="alert-group__title">Risque appétence</span>
+        <span class="alert-group__count">${infos.length}</span>
+      </div>
+      <div class="alert-group__desc">Aucune appétence forte - risque de perte de compétence</div>
+      <div class="alert-group__items">
+        ${infos.slice(0, 4).map(a => {
+          const pct = (a.avgLevel / 4) * 100;
+          return `
+          <div class="alert-card alert-card--info">
+            <div class="alert-card__header">
+              <span class="alert-card__skill">${escapeHtml(a.skill)}</span>
+              <span class="alert-card__badge badge badge--info">Couv. ${a.coverage.toFixed(0)}%</span>
+            </div>
+            <div class="alert-card__level-gauge">
+              <span class="alert-card__level-label">Niveau moy.</span>
+              <div class="alert-card__level-track">
+                <div class="alert-card__level-fill" style="width: ${pct.toFixed(0)}%;"></div>
+                <span class="alert-card__level-value">${a.avgLevel.toFixed(1)}</span>
+              </div>
+              <span class="alert-card__level-max">/4</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
 }
 
 /**
@@ -1085,6 +1133,305 @@ function renderDevelopmentSection(members, allSkills) {
             </div>
           </div>`;
         }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ── Plans de développement individuels ───────────────────────────────────────
+
+/**
+ * Compute a development plan for a single member.
+ * Identifies skills to improve based on: critical gaps, high appetence, and mentor availability.
+ * @param {Object} member - The member
+ * @param {Object[]} allMembers - All team members
+ * @param {string[]} allSkills - All skill names
+ * @param {number} threshold - Critical threshold
+ * @returns {Object} { member, recommendations: [{ skill, currentLevel, targetLevel, priority, mentors, reason }] }
+ */
+function computeDevPlan(member, allMembers, allSkills, threshold) {
+  const recommendations = [];
+
+  for (const skill of allSkills) {
+    const entry = member.skills[skill];
+    const level = entry?.level ?? 0;
+    const appetence = entry?.appetence ?? 0;
+
+    // Pas besoin de progresser si déjà Expert
+    if (level >= 4) continue;
+
+    const stats = getSkillStats(allMembers, skill);
+    const confirmedOrExpert = stats.levels[3] + stats.levels[4];
+    const isCritical = confirmedOrExpert < threshold;
+
+    // Priorité basée sur l'appétence et la criticité
+    let priority = 0;
+    let reason = '';
+
+    if (isCritical && appetence >= 2) {
+      priority = 3; // Haute priorité : compétence critique + membre motivé
+      reason = 'Critique + forte appétence';
+    } else if (isCritical && level > 0) {
+      priority = 2; // Moyenne : compétence critique, membre a déjà des bases
+      reason = 'Compétence critique';
+    } else if (appetence >= 3 && level < 3) {
+      priority = 2; // Moyenne : forte motivation, niveau à améliorer
+      reason = 'Forte appétence';
+    } else if (appetence >= 2 && level < 3) {
+      priority = 1; // Basse : motivation moyenne
+      reason = 'Appétence moyenne';
+    } else {
+      continue;
+    }
+
+    // Trouver les mentors potentiels (Confirmé ou Expert dans cette compétence)
+    const mentors = allMembers
+      .filter(m => m.id !== member.id && (m.skills[skill]?.level ?? 0) >= 3)
+      .map(m => ({ name: m.name, level: m.skills[skill].level, initials: m.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) }));
+
+    recommendations.push({
+      skill,
+      currentLevel: level,
+      targetLevel: Math.min(level + 1, 4),
+      appetence,
+      priority,
+      reason,
+      mentors: mentors.slice(0, 3),
+    });
+  }
+
+  // Trier par priorité décroissante
+  recommendations.sort((a, b) => b.priority - a.priority || b.appetence - a.appetence);
+
+  return { member, recommendations: recommendations.slice(0, 8) };
+}
+
+/**
+ * Render the development plans section in the dashboard.
+ * Shows a selector to pick a member and displays their plan.
+ * @param {Object[]} members - All members
+ * @param {string[]} allSkills - All skill names
+ * @param {number} threshold - Critical threshold
+ * @returns {string} Section HTML
+ */
+function renderDevPlansSection(members, allSkills, threshold) {
+  if (members.length === 0) return '';
+
+  const options = members.map(m => {
+    return `<option value="${m.id}">${escapeHtml(m.name)}</option>`;
+  }).join('');
+
+  return `
+    <div class="card dev-plan-section" id="dev-plan-section" style="margin-top: var(--space-6);">
+      <div class="card__header">
+        <h3 class="card__title">Plan de développement individuel</h3>
+      </div>
+      <div class="dev-plan-picker">
+        <label class="dev-plan-picker__label" for="dev-plan-member-select">Membre</label>
+        <select class="form-select dev-plan-picker__select" id="dev-plan-member-select">
+          <option value="">Choisir un membre...</option>
+          ${options}
+        </select>
+      </div>
+      <div id="dev-plan-content">
+        <div class="dev-plan-empty-state">
+          <div class="dev-plan-empty-state__icon">🎯</div>
+          <div class="dev-plan-empty-state__text">Sélectionnez un membre pour afficher ses recommandations de progression</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the development plan for a specific member into the container.
+ * @param {HTMLElement} container - The #dev-plan-content element
+ * @param {Object} plan - Output of computeDevPlan
+ */
+function renderDevPlanContent(container, plan) {
+  const m = plan.member;
+  const initials = m.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  // Statistiques du membre
+  const skillEntries = Object.values(m.skills);
+  const totalSkills = skillEntries.length;
+  const avgLevel = totalSkills > 0 ? (skillEntries.reduce((s, e) => s + e.level, 0) / totalSkills) : 0;
+  const expertCount = skillEntries.filter(e => e.level >= 4).length;
+  const confirmedCount = skillEntries.filter(e => e.level === 3).length;
+  const highAppCount = skillEntries.filter(e => e.appetence >= 3).length;
+
+  if (plan.recommendations.length === 0) {
+    container.innerHTML = `
+      <div class="dev-plan-profile">
+        <div class="dev-plan-profile__avatar">${initials}</div>
+        <div class="dev-plan-profile__info">
+          <div class="dev-plan-profile__name">${escapeHtml(m.name)}</div>
+          <div class="dev-plan-profile__role">${m.role ? escapeHtml(m.role) : 'Pas de rôle'}</div>
+        </div>
+        <div class="dev-plan-profile__stats">
+          <span class="dev-plan-profile__stat dev-plan-profile__stat--expert">${expertCount} expert</span>
+          <span class="dev-plan-profile__stat dev-plan-profile__stat--confirmed">${confirmedCount} confirmé</span>
+        </div>
+      </div>
+      <div class="dev-plan-empty-state">
+        <div class="dev-plan-empty-state__icon">🏆</div>
+        <div class="dev-plan-empty-state__text">${escapeHtml(m.name)} est bien positionné(e) — aucune recommandation prioritaire</div>
+      </div>
+    `;
+    return;
+  }
+
+  const priorityLabels = { 3: 'Haute', 2: 'Moyenne', 1: 'Basse' };
+  const priorityIcons = { 3: '🔴', 2: '🟠', 1: '🔵' };
+  const priorityGradients = {
+    3: 'linear-gradient(135deg, #FEF2F2 0%, #FFF7ED 100%)',
+    2: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
+    1: 'linear-gradient(135deg, #EFF6FF 0%, #F0F9FF 100%)',
+  };
+  const priorityBorders = { 3: '#FECACA', 2: '#FDE68A', 1: '#BFDBFE' };
+
+  container.innerHTML = `
+    <div class="dev-plan-profile">
+      <div class="dev-plan-profile__avatar">${initials}</div>
+      <div class="dev-plan-profile__info">
+        <div class="dev-plan-profile__name">${escapeHtml(m.name)}</div>
+        <div class="dev-plan-profile__role">${m.role ? escapeHtml(m.role) : 'Pas de rôle'}</div>
+      </div>
+      <div class="dev-plan-profile__stats">
+        <span class="dev-plan-profile__stat dev-plan-profile__stat--expert">${expertCount} expert</span>
+        <span class="dev-plan-profile__stat dev-plan-profile__stat--confirmed">${confirmedCount} confirmé</span>
+        <span class="dev-plan-profile__stat dev-plan-profile__stat--appetence">${highAppCount} motivé</span>
+      </div>
+      <div class="dev-plan-profile__score">
+        <div class="dev-plan-profile__score-value">${avgLevel.toFixed(1)}</div>
+        <div class="dev-plan-profile__score-label">Score moy.</div>
+      </div>
+    </div>
+    <div class="dev-plan-list">
+      ${plan.recommendations.map((rec, idx) => {
+        const progressPct = Math.round((rec.currentLevel / 4) * 100);
+        const targetPct = Math.round((rec.targetLevel / 4) * 100);
+        const mentorBadge = rec.mentors.length > 0
+          ? `<span class="dev-plan-card__mentor-badge">${rec.mentors.length} mentor${rec.mentors.length > 1 ? 's' : ''}</span>`
+          : `<span class="dev-plan-card__mentor-badge dev-plan-card__mentor-badge--none">Externe</span>`;
+
+        return `
+        <div class="dev-plan-card" style="background: ${priorityGradients[rec.priority]}; border-color: ${priorityBorders[rec.priority]};">
+          <div class="dev-plan-card__rank">${idx + 1}</div>
+          <div class="dev-plan-card__body">
+            <div class="dev-plan-card__header">
+              <span class="dev-plan-card__skill">${escapeHtml(rec.skill)}</span>
+              <span class="dev-plan-card__priority">${priorityIcons[rec.priority]} ${priorityLabels[rec.priority]}</span>
+            </div>
+            <div class="dev-plan-card__progress">
+              <div class="dev-plan-card__progress-track">
+                <div class="dev-plan-card__progress-current" style="width: ${progressPct}%; background: ${SKILL_LEVELS[rec.currentLevel]?.color};"></div>
+                <div class="dev-plan-card__progress-target" style="left: ${targetPct}%;"></div>
+              </div>
+              <div class="dev-plan-card__progress-labels">
+                <span>${getSkillLabel(rec.currentLevel)}</span>
+                <span class="dev-plan-card__progress-arrow">→ ${getSkillLabel(rec.targetLevel)}</span>
+              </div>
+            </div>
+            <div class="dev-plan-card__footer">
+              <span class="dev-plan-card__reason">${escapeHtml(rec.reason)}</span>
+              ${mentorBadge}
+            </div>
+            ${rec.mentors.length > 0 ? `
+              <div class="dev-plan-card__mentors">
+                ${rec.mentors.map(mt => `
+                  <span class="dev-plan-card__mentor" title="${escapeHtml(mt.name)} — ${mt.level === 4 ? 'Expert' : 'Confirmé'}">
+                    <span class="dev-plan-card__mentor-avatar">${mt.initials}</span>
+                    ${escapeHtml(mt.name)}
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+/**
+ * Bind interactive events for the dashboard view.
+ * @param {HTMLElement} container - Dashboard container
+ * @param {Object[]} members - All members
+ * @param {string[]} allSkills - All skill names
+ * @param {number} threshold - Critical threshold
+ */
+function bindDashboardEvents(container, members, allSkills, threshold) {
+  const select = container.querySelector('#dev-plan-member-select');
+  const content = container.querySelector('#dev-plan-content');
+
+  if (select && content) {
+    select.addEventListener('change', () => {
+      const memberId = select.value;
+      if (!memberId) {
+        content.innerHTML = '';
+        return;
+      }
+      const member = members.find(m => m.id === memberId);
+      if (!member) return;
+      const plan = computeDevPlan(member, members, allSkills, threshold);
+      renderDevPlanContent(content, plan);
+    });
+  }
+}
+
+/**
+ * Render the team objectives section with progress bars.
+ * Shows progress toward defined targets per skill.
+ * @param {Object[]} members - All members
+ * @param {string[]} allSkills - All skill names
+ * @param {Object} objectives - Map { skillName: { minExperts: number } }
+ * @param {number} threshold - Critical threshold
+ * @returns {string} HTML for the objectives section
+ */
+function renderObjectivesSection(members, allSkills, objectives, threshold) {
+  const entries = Object.entries(objectives).filter(([skill]) => allSkills.includes(skill));
+  if (entries.length === 0) return '';
+
+  let metCount = 0;
+
+  const rows = entries.map(([skill, obj]) => {
+    const target = obj.minExperts || 2;
+    const stats = getSkillStats(members, skill);
+    const current = stats.levels[3] + stats.levels[4];
+    const pct = Math.min(Math.round((current / target) * 100), 100);
+    const isMet = current >= target;
+    if (isMet) metCount++;
+
+    const barColor = isMet ? 'var(--color-success)' : pct >= 50 ? 'var(--color-warning)' : 'var(--color-danger)';
+
+    return `
+      <div class="objective-row">
+        <div class="objective-row__info">
+          <span class="objective-row__skill">${escapeHtml(skill)}</span>
+          <span class="objective-row__target">${current} / ${target} Confirmé(s)/Expert(s)</span>
+        </div>
+        <div class="objective-row__bar">
+          <div class="objective-row__bar-fill" style="width: ${pct}%; background: ${barColor};"></div>
+        </div>
+        <span class="objective-row__badge badge ${isMet ? 'badge--success' : 'badge--warning'}">${isMet ? 'Atteint' : `${pct}%`}</span>
+      </div>
+    `;
+  });
+
+  const globalPct = entries.length > 0 ? Math.round((metCount / entries.length) * 100) : 0;
+
+  return `
+    <div class="card" style="margin-top: var(--space-6);">
+      <div class="card__header">
+        <h3 class="card__title">Objectifs d'équipe</h3>
+        <span class="badge ${globalPct === 100 ? 'badge--success' : 'badge--info'}">${metCount}/${entries.length} atteint(s)</span>
+      </div>
+      <div class="card__subtitle" style="padding: 0 var(--space-5); margin-bottom: var(--space-4); font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+        Progression vers les cibles définies dans Paramètres > Objectifs
+      </div>
+      <div class="objectives-list">
+        ${rows.join('')}
       </div>
     </div>
   `;

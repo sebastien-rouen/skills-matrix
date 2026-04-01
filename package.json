@@ -4,10 +4,13 @@
   "private": true,
   "description": "Matrice de compétences interactive",
   "scripts": {
-    "start": "node server.js",
+    "start": "node bdd/server.js",
     "pm2": "pm2 start ecosystem.config.cjs",
-    "pm2:stop": "pm2 stop skills-matrix",
-    "pm2:logs": "pm2 logs skills-matrix --lines 30"
+    "pm2:stop": "pm2 stop skills-matrix && pm2 del skills-matrix",
+    "pm2:logs": "pm2 logs skills-matrix --lines 30",
+    "pb:start": "bdd/pocketbase serve --http=0.0.0.0:8140 --dir=bdd/pb_data --migrationsDir=bdd/pb_migrations &",
+    "health": "curl -sf http://skills-matrix.bastou.dev/pb/api/health && echo ' ✅ PocketBase OK' || echo ' ❌ PocketBase inaccessible'",
+    "superuser": "bdd/pocketbase superuser upsert admin@skills-matrix.local 'Admin2026$'"
   },
   "dependencies": {
     "express": "^4.21.0"

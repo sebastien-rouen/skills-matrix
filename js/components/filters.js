@@ -76,7 +76,7 @@ export function renderFilters(container) {
         Critiques seuls
       </label>
 
-      <button class="btn btn--ghost btn--sm" id="filter-reset" title="Réinitialiser les filtres">
+      <button class="btn btn--ghost btn--sm" id="filter-reset" aria-label="Réinitialiser les filtres" title="Réinitialiser les filtres">
         ✕
       </button>
     </div>

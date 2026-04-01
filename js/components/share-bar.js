@@ -6,7 +6,7 @@
  */
 
 import { getState, updateState, on, isShareMode, getShareMemberName } from '../state.js';
-import { toastSuccess, toastInfo } from './toast.js';
+import { toastSuccess, toastInfo, toastError } from './toast.js';
 import { saveSharedSkills } from '../services/share.js';
 import { escapeHtml, getInitials } from '../utils/helpers.js';
 
@@ -111,8 +111,8 @@ export function renderShareMemberBanner(container) {
 }
 
 /**
- * Initialize the share auto-save listener.
- * Debounces saves to the server after skill edits.
+ * Initialize the share auto-save listeners.
+ * Debounces saves to the server after skill or category edits.
  */
 export function initShareAutoSave() {
   if (autoSaveSetup) return;
@@ -133,7 +133,10 @@ export function initShareAutoSave() {
       const ok = await saveSharedSkills(token, memberName, member.skills);
       if (ok) {
         toastSuccess('Compétences sauvegardées.');
+      } else {
+        toastError('Erreur lors de la sauvegarde — réessayez.');
       }
     }, 1500);
   });
+
 }

@@ -49,9 +49,7 @@ export function renderImportView(container) {
         </p>
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-3);">
           ${getDemoScenarios().map(demo => `
-            <div class="card card--flat" style="border: 2px solid var(--color-border); padding: var(--space-3); transition: all var(--transition-fast); display: flex; flex-direction: column; gap: var(--space-2);"
-                 onmouseover="this.style.borderColor='var(--color-primary-400)'"
-                 onmouseout="this.style.borderColor='var(--color-border)'">
+            <div class="card card--flat import-card--hoverable" style="padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2);">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);">
                 <h4 style="font-size: var(--font-size-sm); margin: 0;">${demo.title}</h4>
                 <button class="btn btn--primary btn--sm" data-demo-id="${demo.id}" style="flex-shrink: 0;">
@@ -90,8 +88,9 @@ export function renderImportView(container) {
     <div class="card" style="margin-bottom: var(--space-6);">
       <div class="card__header">
         <h3 class="card__title" id="toggle-guide-btn" style="cursor: pointer;">📋 Format attendu</h3>
-        <button class="btn btn--ghost btn--icon" id="copy-template-btn" title="Copier le template">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <button class="btn btn--ghost btn--icon" id="copy-template-btn" aria-label="Copier le template" title="Copier le template">
+          <span id="copy-template-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+          <span id="copy-template-check" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
         </button>
       </div>
       <div id="format-guide" style="display: block;">
@@ -162,7 +161,7 @@ export function renderImportView(container) {
     <div class="card" style="margin-bottom: var(--space-6);">
       <div class="card__header">
         <h3 class="card__title">Collez vos données ici</h3>
-        <button class="btn btn--ghost btn--icon" id="paste-data-btn" title="Coller depuis le presse-papiers">
+        <button class="btn btn--ghost btn--icon" id="paste-data-btn" aria-label="Coller depuis le presse-papiers" title="Coller depuis le presse-papiers">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
         </button>
       </div>
@@ -215,16 +214,14 @@ function renderCustomTemplatesHTML(templates) {
   return `
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-3);">
       ${templates.map(tpl => `
-        <div class="card card--flat" style="border: 2px solid var(--color-border); padding: var(--space-3); transition: all var(--transition-fast); display: flex; flex-direction: column; gap: var(--space-2);"
-             onmouseover="this.style.borderColor='var(--color-primary-400)'"
-             onmouseout="this.style.borderColor='var(--color-border)'">
+        <div class="card card--flat import-card--hoverable" style="padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2);">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);">
             <h4 style="font-size: var(--font-size-sm); margin: 0;">${tpl.builtIn ? '📦' : '💾'} ${escapeHtml(tpl.title)}</h4>
             <div style="display: flex; gap: var(--space-1); flex-shrink: 0;">
               <button class="btn btn--primary btn--sm" data-template-id="${escapeHtml(tpl.id)}">Charger</button>
               ${tpl.builtIn ? '' : `
-                <button class="btn btn--secondary btn--sm" data-template-export="${escapeHtml(tpl.id)}" title="Exporter en fichier JSON">📤</button>
-                <button class="btn btn--danger btn--sm" data-template-delete="${escapeHtml(tpl.id)}" title="Supprimer">✕</button>
+                <button class="btn btn--secondary btn--sm" data-template-export="${escapeHtml(tpl.id)}" aria-label="Exporter en fichier JSON" title="Exporter en fichier JSON">📤</button>
+                <button class="btn btn--danger btn--sm" data-template-delete="${escapeHtml(tpl.id)}" aria-label="Supprimer le template" title="Supprimer">✕</button>
               `}
             </div>
           </div>
@@ -249,12 +246,12 @@ async function refreshTemplates(container) {
   let html = '';
   if (!fromServer && templates.length > 0) {
     html += `<div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-3); background: var(--color-warning-50, rgba(234,179,8,.1)); border: 1px solid var(--color-warning-200, rgba(234,179,8,.3)); border-radius: var(--radius-md); font-size: var(--font-size-xs); color: var(--color-text-secondary);">
-      <span>⚠</span> Serveur non disponible — affichage depuis le stockage local. Lancez <code style="background: var(--color-bg-tertiary); padding: 1px 4px; border-radius: 3px;">npm start</code> pour la persistance fichier.
+      <span>⚠</span> PocketBase non disponible — affichage depuis le stockage local. Lancez <code style="background: var(--color-bg-tertiary); padding: 1px 4px; border-radius: 3px;">npm run pm2</code> pour la persistance PocketBase.
     </div>`;
   }
   if (!fromServer && templates.length === 0) {
     html += renderCustomTemplatesHTML([]);
-    html += `<p style="font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-top: var(--space-2);">Lancez <code style="background: var(--color-bg-tertiary); padding: 1px 4px; border-radius: 3px;">npm start</code> pour charger les templates depuis le serveur.</p>`;
+    html += `<p style="font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-top: var(--space-2);">Lancez <code style="background: var(--color-bg-tertiary); padding: 1px 4px; border-radius: 3px;">npm run pm2</code> pour charger les équipes depuis PocketBase.</p>`;
   } else {
     html += renderCustomTemplatesHTML(templates);
   }
@@ -412,9 +409,9 @@ function bindImportEvents(container) {
       return;
     }
     if (result.fromServer) {
-      toastSuccess(`Template « ${formData.title} » créé (fichier JSON).`);
+      toastSuccess(`Équipe « ${formData.title} » créée dans PocketBase.`);
     } else {
-      toastWarning(`Serveur indisponible — template « ${formData.title} » sauvegardé en local (localStorage). Lancez le serveur avec npm start pour la persistance fichier.`);
+      toastWarning(`PocketBase non disponible — équipe « ${formData.title} » sauvegardée en local. Lancez npm run pm2 pour la persistance PocketBase.`);
     }
     refreshTemplates(container);
   });
@@ -433,7 +430,7 @@ function bindImportEvents(container) {
         if (result.fromServer) {
           toastSuccess('Template importé (fichier JSON).');
         } else {
-          toastWarning('Serveur indisponible — template importé en local (localStorage).');
+          toastWarning('PocketBase non disponible — template importé en local (localStorage).');
         }
         refreshTemplates(container);
       } else {
@@ -506,9 +503,13 @@ function bindImportEvents(container) {
     // Retirer les lignes de commentaire (#) pour le presse-papiers
     const cleanTemplate = template.split('\n').filter(l => !l.startsWith('#')).join('\n');
     await navigator.clipboard.writeText(cleanTemplate);
-    copyTemplateBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    const copyIcon = copyTemplateBtn.querySelector('#copy-template-icon');
+    const checkIcon = copyTemplateBtn.querySelector('#copy-template-check');
+    copyIcon.hidden = true;
+    checkIcon.hidden = false;
     setTimeout(() => {
-      copyTemplateBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+      copyIcon.hidden = false;
+      checkIcon.hidden = true;
     }, 1500);
     toastSuccess('Template copié dans le presse-papiers.');
   });

@@ -4,10 +4,11 @@
  */
 
 import { emit, getState, updateState, on, isShareMode } from '../state.js';
-import { saveCustomTemplate } from '../services/templates.js';
+import { updateCustomTemplate } from '../services/templates.js';
 import { createShareLink, listShareLinks, revokeShareLink } from '../services/share.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { toastSuccess, toastError, toastInfo } from './toast.js';
+import { openPalette } from './command-palette.js';
 
 /** @type {number|null} Debounce timer for auto-save */
 let autoSaveTimer = null;
@@ -18,13 +19,16 @@ let autoSavePaused = false;
 /** @type {string} Currently active view name */
 let activeView = 'matrix';
 
+/** @type {string|null} Last rendered template ID (avoid unnecessary DOM updates) */
+let lastRenderedTemplateId = null;
+
 /** Navigation items configuration */
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Tableau de bord', icon: '📈' },
   { id: 'matrix',    label: 'Matrice',        icon: '📊' },
   { id: 'radar',     label: 'Profil Radar',   icon: '🎯' },
   { id: 'import',    label: 'Données',         icon: '📥' },
-  { id: 'settings',  label: 'Paramètres',     icon: '⚙️' },
+  { id: 'settings',  label: 'Paramètres',     shareLabel: 'Référentiel', icon: '⚙️' },
 ];
 
 /**
@@ -45,16 +49,24 @@ export function renderSidebar(container) {
       <nav class="sidebar__nav">
         <div class="sidebar__section-label">Vues</div>
         ${NAV_ITEMS
-          .filter(item => !isShareMode() || ['matrix', 'dashboard', 'radar'].includes(item.id))
+          .filter(item => !isShareMode() || ['matrix', 'dashboard', 'radar', 'settings'].includes(item.id))
           .map(item => `
           <a class="sidebar__link ${item.id === activeView ? 'sidebar__link--active' : ''}"
              href="#${item.id}"
              data-view="${item.id}">
             <span class="sidebar__link-icon">${item.icon}</span>
-            <span>${item.label}</span>
+            <span>${isShareMode() && item.shareLabel ? item.shareLabel : item.label}</span>
           </a>
         `).join('')}
       </nav>
+
+      <button class="sidebar__search-hint" id="sidebar-search-btn" title="Recherche rapide (Ctrl+K)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+        </svg>
+        <span>Rechercher...</span>
+        <kbd class="sidebar__search-kbd">Ctrl+K</kbd>
+      </button>
 
       <div class="sidebar__bottom">
         <div class="sidebar__template" id="sidebar-template-panel"></div>
@@ -74,6 +86,7 @@ export function renderSidebar(container) {
   bindEvents(container);
   updateTemplatePanel();
   setupAutoSave();
+  setupHamburger();
 }
 
 /**
@@ -90,7 +103,14 @@ function bindEvents(container) {
       if (viewId && viewId !== activeView) {
         navigateTo(viewId);
       }
+      closeMobileSidebar();
     });
+  });
+
+  // Bouton recherche rapide (Ctrl+K)
+  container.querySelector('#sidebar-search-btn')?.addEventListener('click', () => {
+    closeMobileSidebar();
+    openPalette();
   });
 }
 
@@ -102,7 +122,13 @@ export function navigateTo(viewId) {
   activeView = viewId;
   // Preserver les parametres de requete (ex: ?share=TOKEN) lors de la navigation
   const search = window.location.search;
-  history.pushState(null, '', search + '#' + viewId);
+  // Preserver les sous-parametres du hash (ex: /transposed) si on reste sur la meme vue
+  const currentHash = window.location.hash.replace('#', '');
+  const [currentBase, currentSub] = currentHash.split('/');
+  const newHash = currentBase === viewId && currentSub
+    ? `#${viewId}/${currentSub}`
+    : `#${viewId}`;
+  history.pushState(null, '', search + newHash);
   emit('view:changed', viewId);
   updateActiveLink();
 }
@@ -155,9 +181,7 @@ function updateTemplatePanel() {
           <span class="sidebar__template-badge">${isBuiltIn ? 'Intégré' : 'Personnalisé'}</span>
         </div>
       </div>
-      ${isBuiltIn ? `
-        <div class="sidebar__template-readonly">Lecture seule</div>
-      ` : `
+      ${isBuiltIn ? `` : `
         <label class="sidebar__template-toggle">
           <span class="sidebar__template-toggle-track">
             <input type="checkbox" id="autosave-toggle" ${autoSave ? 'checked' : ''}>
@@ -165,11 +189,11 @@ function updateTemplatePanel() {
           </span>
           <span>Auto-sauvegarde</span>
         </label>
-        <button class="btn btn--sm sidebar__share-btn" id="sidebar-share-btn" title="Générer un lien de partage">
-          🔗 Partager
-        </button>
-        <div id="sidebar-share-links" class="sidebar__share-links"></div>
       `}
+      <button class="btn btn--sm sidebar__share-btn" id="sidebar-share-btn" title="Générer un lien de partage">
+        🔗 Partager
+      </button>
+      <div id="sidebar-share-links" class="sidebar__share-links"></div>
     </div>
   `;
 
@@ -187,28 +211,31 @@ function updateTemplatePanel() {
   shareBtn?.addEventListener('click', async () => {
     // Verifier si un lien existe deja
     const existing = await listShareLinks(tpl.id);
+    let shareUrl;
     if (existing.length > 0) {
-      const shareUrl = `${window.location.origin}${window.location.pathname}?share=${existing[0].token}`;
-      await copyToClipboard(shareUrl);
-      toastInfo('Lien de partage copié !');
-      return;
-    }
-    // Sinon en creer un nouveau
-    const result = await createShareLink(tpl.id);
-    if (result.success) {
-      const shareUrl = `${window.location.origin}${window.location.pathname}?share=${result.token}`;
-      await copyToClipboard(shareUrl);
-      toastSuccess('Lien de partage créé et copié !');
-      loadShareLink(tpl.id);
+      shareUrl = `${window.location.origin}${window.location.pathname}?share=${existing[0].token}`;
     } else {
-      toastError('Impossible de créer le lien de partage.');
+      const result = await createShareLink(tpl.id);
+      if (!result.success) {
+        toastError('Impossible de créer le lien de partage.');
+        return;
+      }
+      shareUrl = `${window.location.origin}${window.location.pathname}?share=${result.token}`;
+      loadShareLink(tpl.id);
     }
+    await copyToClipboard(shareUrl);
+    // Feedback visuel inline : "Copié ✓" en vert pendant 2s
+    const original = shareBtn.textContent;
+    shareBtn.textContent = 'Copié ✓';
+    shareBtn.classList.add('sidebar__share-btn--copied');
+    setTimeout(() => {
+      shareBtn.textContent = original;
+      shareBtn.classList.remove('sidebar__share-btn--copied');
+    }, 2000);
   });
 
-  // Charger le lien existant
-  if (!isBuiltIn) {
-    loadShareLink(tpl.id);
-  }
+  // Charger le lien existant (tous les templates, builtIn ou non)
+  loadShareLink(tpl.id);
 }
 
 /**
@@ -248,16 +275,9 @@ async function loadShareLink(templateId) {
   container.innerHTML = `
     <div class="sidebar__share-item">
       <span class="sidebar__share-date" title="Créé le ${date}">Lien actif · ${date}</span>
-      <button class="sidebar__share-copy" data-token="${escapeHtml(link.token)}" title="Copier le lien">📋</button>
-      <button class="sidebar__share-revoke" data-token="${escapeHtml(link.token)}" title="Révoquer">✕</button>
+      <button class="sidebar__share-revoke" data-token="${escapeHtml(link.token)}" aria-label="Révoquer ce lien de partage" title="Révoquer">✕</button>
     </div>
   `;
-
-  container.querySelector('.sidebar__share-copy')?.addEventListener('click', async () => {
-    const url = `${window.location.origin}${window.location.pathname}?share=${link.token}`;
-    await copyToClipboard(url);
-    toastInfo('Lien copié !');
-  });
 
   container.querySelector('.sidebar__share-revoke')?.addEventListener('click', async () => {
     const ok = await revokeShareLink(link.token);
@@ -270,9 +290,6 @@ async function loadShareLink(templateId) {
 
 /** @type {Function|null} Unsubscribe from state changes */
 let unsubAutoSave = null;
-
-/** @type {string|null} Last rendered template ID (avoid unnecessary DOM updates) */
-let lastRenderedTemplateId = null;
 
 /**
  * Setup the auto-save listener for state changes.
@@ -296,24 +313,25 @@ function setupAutoSave() {
     if (autoSavePaused) return;
     if (!state.autoSaveTemplate) return;
     if (!state.activeTemplate) return;
-    if (state.activeTemplate.builtIn) return;
 
-    // Debounce : sauvegarde 2s apres la derniere modification
+    // Capturer l'ID immédiatement pour éviter la race condition :
+    // si le template change dans les 2s, on n'écrase pas le mauvais enregistrement
+    const templateIdSnapshot = state.activeTemplate.id;
+
+    // Debounce : sauvegarde 2s après la dernière modification
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
     autoSaveTimer = setTimeout(async () => {
+      if (autoSavePaused) return;
       const current = getState();
-      if (!current.activeTemplate || current.activeTemplate.builtIn) return;
       if (!current.autoSaveTemplate) return;
+      // Ignorer si le template a changé pendant le délai
+      if (current.activeTemplate?.id !== templateIdSnapshot) return;
 
-      const result = await saveCustomTemplate({
-        title: current.activeTemplate.title,
-        description: current.activeTemplate.description || '',
+      await updateCustomTemplate(templateIdSnapshot, {
         members: current.members,
         categories: current.categories || {},
       });
-      if (result?.success) {
-        console.log('[AutoSave] Template sauvegardé :', current.activeTemplate.title);
-      }
+      // Sauvegarde silencieuse — pas de toast pour ne pas perturber l'UX
     }, 2000);
   });
 }
@@ -324,6 +342,41 @@ function setupAutoSave() {
  */
 export function setAutoSavePaused(paused) {
   autoSavePaused = paused;
+}
+
+/**
+ * Close the mobile sidebar overlay.
+ */
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('app-sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const btn = document.getElementById('hamburger-btn');
+  sidebar?.classList.remove('app__sidebar--open');
+  overlay?.classList.remove('sidebar-overlay--visible');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+/**
+ * Setup hamburger toggle and overlay for mobile navigation.
+ */
+function setupHamburger() {
+  const btn = document.getElementById('hamburger-btn');
+  const overlay = document.getElementById('sidebar-overlay');
+  const sidebar = document.getElementById('app-sidebar');
+  if (!btn || !overlay || !sidebar) return;
+
+  btn.addEventListener('click', () => {
+    const isOpen = sidebar.classList.contains('app__sidebar--open');
+    if (isOpen) {
+      closeMobileSidebar();
+    } else {
+      sidebar.classList.add('app__sidebar--open');
+      overlay.classList.add('sidebar-overlay--visible');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  });
+
+  overlay.addEventListener('click', closeMobileSidebar);
 }
 
 /**

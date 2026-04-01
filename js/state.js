@@ -1,6 +1,10 @@
 /**
  * Centralized state store with pub/sub event system.
  * Single source of truth for the entire application.
+ *
+ * Deux modes de fonctionnement :
+ * - Mode standalone : localStorage (comportement historique)
+ * - Mode équipe (URL ?equipe=CODE) : PocketBase, écriture atomique, realtime SSE
  */
 
 import { createDefaultState } from './models/data.js';
@@ -91,6 +95,131 @@ export function initState() {
   emit('state:changed', state);
 }
 
+// ── Mode équipe PocketBase ────────────────────────────────────────────────────
+
+/**
+ * Initialise l'application depuis PocketBase pour une équipe donnée.
+ * Charge équipe, membres, compétences, catégories et évaluations en parallèle.
+ * Active ensuite la synchronisation realtime.
+ *
+ * @param {string} equipeCode - Code équipe depuis l'URL (?equipe=CODE)
+ * @returns {Promise<boolean>} true si l'équipe a été trouvée et chargée
+ */
+export async function initFromPocketBase(equipeCode) {
+    const { getEquipe, getMembres } = await import('./services/equipes.js');
+    const { getCategories, getCompetencesForEquipe, buildCategoriesMap, buildCompetenceMap } =
+        await import('./services/referentiel.js');
+    const { getEvaluations, clearEvalCache } = await import('./services/evaluations.js');
+
+    const equipe = await getEquipe(equipeCode);
+    if (!equipe) return false;
+
+    clearEvalCache();
+
+    const [membres, competences, categories, evaluations] = await Promise.all([
+        getMembres(equipe.id),
+        getCompetencesForEquipe(equipe.id),
+        getCategories(),
+        getEvaluations(equipe.id),
+    ]);
+
+    // Construire la map id→compétence pour les évaluations
+    const compById = Object.fromEntries(competences.map(c => [c.id, c]));
+
+    // Construire members[] au format attendu par les vues
+    const members = membres.map(m => {
+        const memberEvals = evaluations.filter(e => e.membre === m.id);
+        const skills = {};
+        for (const ev of memberEvals) {
+            const comp = compById[ev.competence] || ev.expand?.competence;
+            if (comp) skills[comp.name] = { level: ev.level, appetence: ev.appetence ?? 0 };
+        }
+        return { id: m.id, name: m.name, role: m.role || '',
+            appetences: m.appetences || '', groups: m.groups || [], skills };
+    });
+
+    const categoriesMap = buildCategoriesMap(categories, competences);
+    const competenceMap = buildCompetenceMap(competences);
+
+    // Mettre à jour le state (silent pour éviter un double rendu)
+    state = {
+        ...createDefaultState(),
+        ...load(),
+        members,
+        categories: categoriesMap,
+        equipeId: equipe.id,
+        equipeCode,
+        competenceMap,
+    };
+    save(state);
+    emit('state:initialized', state);
+    emit('state:changed', state);
+
+    // Activer le realtime
+    await setupRealtimeSync(equipe.id, membres, compById);
+
+    return true;
+}
+
+/** @type {Function|null} Fonction de désabonnement realtime active */
+let _unsubscribeRealtime = null;
+
+/**
+ * S'abonne aux évaluations de l'équipe en realtime (SSE PocketBase).
+ * Quand un autre membre sauvegarde → le state se met à jour automatiquement.
+ *
+ * @param {string} equipeId
+ * @param {Object[]} membres - Liste des membres PB
+ * @param {Object} compById - Map id→compétence
+ */
+async function setupRealtimeSync(equipeId, membres, compById) {
+    if (_unsubscribeRealtime) {
+        _unsubscribeRealtime();
+        _unsubscribeRealtime = null;
+    }
+
+    const { subscribeToEvaluations } = await import('./services/evaluations.js');
+
+    _unsubscribeRealtime = await subscribeToEvaluations(equipeId, (action, record) => {
+        const current = getState();
+
+        // Filtrer : ignorer les évaluations d'autres équipes
+        const membre = membres.find(m => m.id === record.membre);
+        if (!membre) return;
+
+        const comp = compById[record.competence];
+        if (!comp) return;
+
+        const memberIdx = current.members.findIndex(m => m.id === record.membre);
+        if (memberIdx === -1) return;
+
+        if (action === 'delete') {
+            delete current.members[memberIdx].skills[comp.name];
+        } else {
+            current.members[memberIdx].skills[comp.name] = {
+                level: record.level,
+                appetence: record.appetence ?? 0,
+            };
+        }
+
+        // Mise à jour silencieuse du state (pas de save localStorage)
+        state = structuredClone(current);
+        emit('state:changed', state);
+    });
+}
+
+/**
+ * Désabonne le realtime (ex: changement d'équipe).
+ */
+export function teardownRealtime() {
+    if (_unsubscribeRealtime) {
+        _unsubscribeRealtime();
+        _unsubscribeRealtime = null;
+    }
+}
+
+// ── Convenience mutators ──────────────────────────────────────────────────────
+
 // --- Convenience mutators ---
 
 /**
@@ -143,6 +272,7 @@ export function removeMember(memberId) {
 
 /**
  * Update a specific skill for a member.
+ * En mode équipe PB : persiste de façon atomique en arrière-plan.
  * @param {string} memberId - Member ID
  * @param {string} skillName - Skill name
  * @param {Object} skillEntry - { level, appetence }
@@ -152,9 +282,20 @@ export function updateSkill(memberId, skillName, skillEntry) {
   const member = current.members.find(m => m.id === memberId);
   if (!member) return;
 
+  // 1. Mise à jour locale immédiate (optimiste — pas d'attente réseau)
   member.skills[skillName] = { ...skillEntry };
+  member.lastUpdated = new Date().toISOString();
   setState(current);
   emit('skill:updated', { memberId, skillName, ...skillEntry });
+
+  // 2. Si mode équipe PB : persistance atomique en arrière-plan
+  const competenceId = current.competenceMap?.[skillName];
+  if (current.equipeId && competenceId) {
+    import('./services/evaluations.js').then(({ upsertEvaluation }) => {
+      upsertEvaluation(memberId, competenceId, skillEntry.level, skillEntry.appetence ?? 0)
+        .catch(err => console.warn('[State] Sync PB échoué :', err));
+    });
+  }
 }
 
 /**
@@ -167,14 +308,15 @@ export function removeSkill(skillName) {
     delete member.skills[skillName];
   }
   if (current.categories) {
-    for (const [cat, skills] of Object.entries(current.categories)) {
+    for (const [catName, skills] of Object.entries(current.categories)) {
       const idx = skills.indexOf(skillName);
       if (idx !== -1) skills.splice(idx, 1);
-      if (skills.length === 0) delete current.categories[cat];
+      if (skills.length === 0) delete current.categories[catName];
     }
   }
   setState(current);
   emit('skill:removed', skillName);
+  emit('categories:updated', current.categories);
 }
 
 /**
@@ -198,6 +340,7 @@ export function renameSkill(oldName, newName) {
   }
   setState(current);
   emit('skill:renamed', { oldName, newName });
+  emit('categories:updated', current.categories);
 }
 
 /**
@@ -253,6 +396,22 @@ export function getShareMemberName() {
  */
 export function getShareToken() {
   return state.shareToken || null;
+}
+
+/**
+ * Indique si l'app tourne en mode équipe PocketBase.
+ * @returns {boolean}
+ */
+export function isEquipeMode() {
+  return !!state.equipeId;
+}
+
+/**
+ * Retourne le code équipe actif (depuis l'URL ?equipe=CODE).
+ * @returns {string|null}
+ */
+export function getEquipeCode() {
+  return state.equipeCode || null;
 }
 
 /**

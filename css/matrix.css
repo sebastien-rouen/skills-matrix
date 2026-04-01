@@ -9,7 +9,7 @@
   border-radius: var(--radius-xl);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 300px);
 }
 
 /* --- Matrix Table --- */
@@ -40,13 +40,13 @@
   left: 0;
   z-index: calc(var(--z-sticky) + 1);
   text-align: left;
-  min-width: 180px;
+  min-width: var(--matrix-col1-width);
   background: var(--color-primary-900);
 }
 
 .matrix-table thead th:nth-child(2) {
   position: sticky;
-  left: 180px;
+  left: var(--matrix-col1-width);
   z-index: calc(var(--z-sticky) + 1);
   text-align: left;
   min-width: 120px;
@@ -97,6 +97,7 @@
   height: 48px;
   min-width: 80px;
   position: relative;
+  z-index: 1;
 }
 
 .matrix-table tbody td:first-child {
@@ -108,13 +109,13 @@
   padding: var(--space-2) var(--space-3);
   font-weight: var(--font-weight-medium);
   font-size: var(--font-size-sm);
-  min-width: 180px;
+  min-width: var(--matrix-col1-width);
   border-right: 2px solid var(--color-border);
 }
 
 .matrix-table tbody td:nth-child(2) {
   position: sticky;
-  left: 180px;
+  left: var(--matrix-col1-width);
   background: var(--color-surface);
   z-index: calc(var(--z-sticky) - 1);
   text-align: left;
@@ -181,6 +182,15 @@
 .skill-cell--level-3 .skill-cell__level { color: var(--color-level-confirmed-text); }
 .skill-cell--level-4 .skill-cell__level { color: var(--color-level-expert-text); }
 
+/* --- Focus clavier --- */
+.skill-cell--focused {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  z-index: 1;
+  position: relative;
+}
+
 /* --- Appetence Badge --- */
 .skill-cell__appetence {
   position: absolute;
@@ -212,6 +222,30 @@
   border-bottom-color: currentColor;
 }
 
+/* --- Tooltip flottant (fixed, échappe au overflow du container) --- */
+.matrix-skill-tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip, 9999);
+  background: var(--color-neutral-900, #0f172a);
+  color: var(--color-neutral-50, #f8fafc);
+  border: 1px solid var(--color-neutral-700, #334155);
+  border-radius: var(--radius-md);
+  padding: 5px 10px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform: translateY(4px);
+}
+
+.matrix-skill-tooltip--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* --- Member Name Cell --- */
 .member-name {
   display: flex;
@@ -233,6 +267,14 @@
   flex-shrink: 0;
 }
 
+/* --- Dernière mise à jour --- */
+.member-last-updated {
+  font-size: 0.65rem;
+  color: var(--color-text-tertiary);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 /* --- Inline Edit --- */
 .inline-edit {
   position: fixed;
@@ -245,7 +287,7 @@
   flex-direction: column;
   align-items: stretch;
   padding: var(--space-3);
-  min-width: 180px;
+  min-width: var(--matrix-col1-width);
   max-height: 320px;
   overflow-y: auto;
 }
@@ -449,4 +491,224 @@
 
 .matrix-row--share-locked .editable-cell {
   cursor: default;
+}
+
+/* ============================================
+   Toggle de disposition de vue
+   ============================================ */
+.matrix-layout-toggle {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.matrix-layout-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.matrix-layout-btn:hover {
+  background: var(--color-primary-50);
+  border-color: var(--color-primary-300);
+  color: var(--color-primary-700);
+}
+
+.matrix-layout-btn--active {
+  background: var(--color-primary-600);
+  border-color: var(--color-primary-600);
+  color: #fff;
+}
+
+.matrix-layout-btn--active:hover {
+  background: var(--color-primary-700);
+  border-color: var(--color-primary-700);
+  color: #fff;
+}
+
+/* ============================================
+   Vue transposée (compétences en lignes)
+   ============================================ */
+
+/* Annule les sticky latéraux des colonnes 2 et 3 */
+.matrix-table--transposed thead th:nth-child(2),
+.matrix-table--transposed thead th:nth-child(3) {
+  position: sticky;
+  top: 0;
+  left: auto;
+  min-width: 80px;
+  text-align: center;
+}
+
+/* En-tête : première colonne = "Compétence" */
+.matrix-table--transposed thead th:first-child,
+.transposed-skill-col {
+  text-align: left;
+  min-width: 200px;
+}
+
+/* En-tête : colonnes membres */
+.transposed-member-header {
+  min-width: 90px;
+  max-width: 120px;
+  padding: 0 !important;
+  text-align: center;
+  vertical-align: top;
+  border-top: 3px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.transposed-member-header:hover {
+  border-top-color: var(--color-primary-400);
+}
+
+.transposed-member-header--active {
+  border-top-color: var(--color-primary-500) !important;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.transposed-member-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: var(--space-3) var(--space-2) var(--space-2);
+}
+
+.transposed-member-card .member-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: var(--font-size-xs);
+  box-shadow: 0 0 0 2px var(--color-primary-800), 0 0 0 3px var(--color-primary-400);
+  flex-shrink: 0;
+}
+
+.transposed-member-name {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-inverse);
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.transposed-member-role {
+  font-size: 10px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-primary-300);
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+  margin-top: -2px;
+}
+
+/* Ligne séparateur de catégorie (transposée) */
+.transposed-category-row th {
+  background: var(--color-primary-800);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-primary-700);
+  text-align: left;
+}
+
+/* Cellule label compétence (première colonne des lignes de données) */
+.transposed-skill-label {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
+  z-index: calc(var(--z-sticky) - 1);
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  width: 140px;
+  min-width: 100px;
+  max-width: 160px;
+  border-right: 2px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-light);
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Annule les sticky de td:first-child / td:nth-child(2/3) en mode transposé */
+.matrix-table--transposed tbody td:first-child,
+.matrix-table--transposed tbody td:nth-child(2),
+.matrix-table--transposed tbody td:nth-child(3) {
+  position: static;
+  text-align: center;
+  padding: 0;
+  min-width: 80px;
+  font-weight: normal;
+  font-size: inherit;
+  color: inherit;
+  border-right: 1px solid var(--color-border-light);
+}
+
+/* Hover sur les lignes transposées */
+.matrix-table--transposed tbody tr:hover .transposed-skill-label {
+  background: var(--color-primary-50);
+}
+
+/* Cellule lockée en mode partage */
+.skill-cell--locked {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ============================================
+   Mobile — colonnes sticky
+   ============================================ */
+@media (max-width: 768px) {
+  /* Réduire la largeur de la colonne Nom */
+  :root {
+    --matrix-col1-width: 120px;
+  }
+
+  /* Colonne Rôle : retire le sticky horizontal, laisse défiler avec le contenu */
+  .matrix-table thead th:nth-child(2) {
+    left: auto;
+  }
+
+  .matrix-table tbody td:nth-child(2) {
+    position: static;
+    left: auto;
+    border-right: 1px solid var(--color-border-light);
+  }
+
+  /* Filtres : scroll horizontal au lieu de retour à la ligne */
+  #matrix-filters .filters-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  #matrix-filters .filters-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  #matrix-filters .filters-bar__search {
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+
+  #matrix-filters .filters-bar__select,
+  #matrix-filters .filters-bar__divider {
+    flex-shrink: 0;
+  }
 }

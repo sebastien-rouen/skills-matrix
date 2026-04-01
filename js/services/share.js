@@ -79,6 +79,25 @@ export async function saveSharedSkills(token, memberName, skills) {
 }
 
 /**
+ * Sauvegarder les catégories via le lien de partage.
+ * @param {string} token - Token de partage
+ * @param {Object} categories - Map catégorie → [skills]
+ * @returns {Promise<boolean>} Succes
+ */
+export async function saveSharedCategories(token, categories, members) {
+  try {
+    const res = await fetch(`${SHARE_API}/${encodeURIComponent(token)}/categories`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories, members }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Generer un lien de partage pour un template.
  * @param {string} templateId
  * @returns {Promise<{success: boolean, token?: string}>}

@@ -26,6 +26,19 @@
 </head>
 <body>
   <div class="app">
+    <!-- Mobile Header -->
+    <header class="app__mobile-header" id="app-mobile-header">
+      <button class="hamburger" id="hamburger-btn" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="app-sidebar">
+        <span class="hamburger__bar"></span>
+        <span class="hamburger__bar"></span>
+        <span class="hamburger__bar"></span>
+      </button>
+      <span class="app__mobile-title">Skills Matrix</span>
+    </header>
+
+    <!-- Sidebar Overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+
     <!-- Sidebar Navigation -->
     <aside class="app__sidebar" id="app-sidebar"></aside>
 

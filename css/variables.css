@@ -115,6 +115,7 @@
   --sidebar-collapsed-width: 64px;
   --header-height: 64px;
   --content-max-width: 1400px;
+  --matrix-col1-width: 180px;
 
   /* --- Z-index --- */
   --z-sidebar: 100;
@@ -124,3 +125,4 @@
   --z-toast: 10000;
   --z-tooltip: 10100;
 }
+

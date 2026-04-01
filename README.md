@@ -21,17 +21,16 @@ Chaque equipe a un tableur de competences qui dort dans un Drive. **Skills Matri
 
 ## 🚀 Demarrage rapide
 
-### Option 1 : Mode complet (avec templates persistants)
+### Option 1 : Mode complet (avec PocketBase)
 
-Le mode recommande. Les templates sont sauvegardes en fichiers JSON sur votre machine.
+Le mode recommande. Les donnees sont persistees dans une base PocketBase locale.
 
 ```bash
 # 1. Installer les dependances (une seule fois)
 npm install
 
-# 2. Lancer le serveur (au choix)
-npm start                      # Direct (premier plan, logs dans le terminal)
-npm run pm2                    # Via PM2 (arriere-plan, redemarrage auto)
+# 2. Lancer avec PM2 (demarre Node.js + PocketBase en arriere-plan)
+npm run pm2
 
 # 3. Ouvrir dans votre navigateur
 #    http://localhost:5500
@@ -39,13 +38,17 @@ npm run pm2                    # Via PM2 (arriere-plan, redemarrage auto)
 
 **Avec PM2** (recommande pour un usage au quotidien) :
 ```bash
-npm run pm2                    # Demarrer en arriere-plan
+npm run pm2                    # Demarrer (Node.js + PocketBase)
 npm run pm2:stop               # Arreter
 npm run pm2:logs               # Voir les 30 derniers logs
+pm2 logs skills-matrix-pb      # Logs PocketBase uniquement
 ```
 
-> **C'est quoi PM2 ?** Un gestionnaire de processus Node.js. Il garde le serveur en vie en arriere-plan
-> et le relance automatiquement en cas de crash. Installez-le avec `npm install -g pm2`.
+> **C'est quoi PM2 ?** Un gestionnaire de processus Node.js. Il garde les deux serveurs en vie en arriere-plan
+> et les relance automatiquement en cas de crash. Installez-le avec `npm install -g pm2`.
+
+> **Admin PocketBase** : une fois lances, l'interface d'administration est disponible sur
+> `http://localhost:5500/pb/_/` (ou directement sur le port 8140).
 
 > **C'est quoi `npm` ?** C'est le gestionnaire de paquets de Node.js.
 > Si vous ne l'avez pas, installez Node.js depuis [nodejs.org](https://nodejs.org/) (choisissez la version LTS).
@@ -66,16 +69,17 @@ python -m http.server 5500     # Si vous avez Python
 
 ### ⚖️ Difference entre les deux modes
 
-| | Mode complet (`npm start`) | Mode leger (serveur statique) |
+| | Mode complet (`npm run pm2`) | Mode leger (serveur statique) |
 |---|---|---|
 | 👀 Consultation | ✅ Oui | ✅ Oui |
 | 📥 Import de donnees | ✅ Oui | ✅ Oui |
 | 🎮 Demos | ✅ Oui | ✅ Oui |
 | 💾 Sauvegarde auto (localStorage) | ✅ Oui | ✅ Oui |
-| 📦 Creer des templates | Fichiers JSON dans `templates/` | localStorage (navigateur) |
-| 🔗 Partager un template | Copier le fichier `.json` | Pas possible |
+| 🗄️ Base de donnees PocketBase | ✅ Oui | ❌ Non |
+| 📦 Creer des templates (persistants) | ✅ PocketBase | localStorage (navigateur) |
+| 🔗 Partager un template | Via l'API PocketBase | Pas possible |
 
-L'app detecte automatiquement la presence du serveur. Si le serveur n'est pas lance, un message vous previent et les templates sont sauvegardes localement.
+L'app detecte automatiquement la presence de PocketBase. Si PocketBase n'est pas lance, un message vous previent et les donnees restent dans le navigateur.
 
 ---
 
@@ -191,12 +195,17 @@ Graphique radar par membre avec comparaison multi-profils (jusqu'a 5), overlay m
 skills-matrix/
 ├── index.html                # Point d'entree unique (SPA)
 ├── package.json              # Dependances serveur (Express) + scripts PM2
-├── ecosystem.config.cjs      # Configuration PM2 (watch, env)
-├── server.js                 # Mini serveur Express (API templates + fichiers statiques)
-├── templates/                # Templates JSON (1 fichier = 1 template)
+├── ecosystem.config.cjs      # Configuration PM2 (Node.js + PocketBase)
+├── bdd/
+│   ├── pocketbase            # Binaire PocketBase (port 8140)
+│   ├── server.js             # Mini serveur Express (proxy /pb + fichiers statiques)
+│   ├── pb_data/              # Donnees PocketBase (gitignore)
+│   └── pb_migrations/        # Migrations JS (schema + seed)
+│       ├── 1741737600_init_skills_matrix.js   # Schema des collections
+│       └── 1773187200_seed_equipes.js         # Seed : 3 equipes
+├── templates/                # Templates JSON legacy (mode leger)
 │   ├── index.json            # Manifeste des templates built-in
-│   ├── tribu-value.json      # Template de demo (built-in, commite)
-│   └── *.local.json          # Templates crees via l'app (gitignores)
+│   └── *.local.json          # Templates locaux (gitignores)
 ├── css/
 │   ├── variables.css         # Design tokens (couleurs, typo, spacing)
 │   ├── base.css              # Reset, layout global
@@ -252,7 +261,11 @@ skills-matrix/
 ## ❓ FAQ
 
 **Je vois "Serveur non disponible" dans l'interface, c'est grave ?**
-Non. L'application fonctionne parfaitement sans serveur. Les templates seront simplement sauvegardes dans votre navigateur au lieu de fichiers. Pour la persistance fichier, lancez `npm start`.
+Non. L'application fonctionne parfaitement sans serveur. Les donnees seront simplement sauvegardees dans votre navigateur. Pour la persistance PocketBase, lancez `npm run pm2`.
+
+**Comment acceder a l'admin PocketBase ?**
+En mode complet : `http://localhost:5500/pb/_/` ou `http://localhost:8140/_/`.
+En prod BastaVerse : `https://skills-matrix-drafts.bastou.dev/pb/_/`.
 
 **Mes donnees sont perdues quand je ferme le navigateur ?**
 Non. Tout est sauvegarde automatiquement dans le `localStorage` de votre navigateur. Vos donnees persistent entre les sessions. Pour un backup, utilisez l'export JSON dans Parametres.

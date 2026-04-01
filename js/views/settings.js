@@ -4,8 +4,8 @@
  * multiple API sources, display settings, and backup/restore.
  */
 
-import { getState, updateCategories, updateSettings, updateMember, removeMember, replaceMembers, addMembers, removeSkill } from '../state.js';
-import { getAllSkillNames, getAllGroups } from '../models/data.js';
+import { getState, updateState, updateCategories, updateSettings, updateMember, removeMember, replaceMembers, addMembers, removeSkill, isEquipeMode, isShareMode } from '../state.js';
+import { getAllSkillNames, getAllGroups, getAllRoles, createMember } from '../models/data.js';
 import { exportJSON, parseJSON } from '../services/exporter.js';
 import {
   loadApiSources, addApiSource, removeApiSource,
@@ -13,7 +13,8 @@ import {
   applyGroupsToMembers, SOURCE_TYPES, getSourceTypeLabel,
 } from '../services/api-source.js';
 import { toastSuccess, toastError, toastWarning, toastInfo } from '../components/toast.js';
-import { saveCustomTemplate } from '../services/templates.js';
+import { updateCustomTemplate } from '../services/templates.js';
+import { saveSharedCategories } from '../services/share.js';
 import { confirm, showModal, closeModal } from '../components/modal.js';
 import { downloadFile, escapeHtml, debounce, generateId } from '../utils/helpers.js';
 
@@ -23,17 +24,36 @@ import { downloadFile, escapeHtml, debounce, generateId } from '../utils/helpers
 
 /**
  * Save the active template to the server immediately.
+ * In share mode, saves only categories via the share token.
  * Prevents stale server data from overwriting local changes on reload.
  */
 function saveActiveTemplate() {
+  if (isShareMode()) {
+    void saveReferentiel();
+    return;
+  }
   const current = getState();
-  if (!current.activeTemplate || current.activeTemplate.builtIn) return;
-  saveCustomTemplate({
-    title: current.activeTemplate.title,
-    description: current.activeTemplate.description || '',
+  if (!current.activeTemplate) return;
+  updateCustomTemplate(current.activeTemplate.id, {
     members: current.members,
     categories: current.categories || {},
   });
+}
+
+/**
+ * Sauvegarde le référentiel (catégories) sur le serveur en mode partage.
+ * Appel direct, sans debounce, depuis chaque handler de modification.
+ */
+async function saveReferentiel() {
+  if (!isShareMode()) return;
+  const { shareToken, categories, members } = getState();
+  if (!shareToken) return;
+  const ok = await saveSharedCategories(shareToken, categories || {}, members || []);
+  if (ok) {
+    toastSuccess('Référentiel sauvegardé.');
+  } else {
+    toastError('Erreur lors de la sauvegarde — réessayez.');
+  }
 }
 
 // ============================================================
@@ -43,6 +63,7 @@ function saveActiveTemplate() {
 const SECTIONS = [
   { id: 'settings-categories', label: 'Categories', needsData: true },
   { id: 'settings-members', label: 'Membres', needsData: true },
+  { id: 'settings-objectives', label: 'Objectifs', needsData: true },
   { id: 'settings-thresholds', label: 'Seuils', needsData: false },
   { id: 'settings-export', label: 'Export CSV', needsData: false },
   { id: 'settings-sources', label: 'Sources API', needsData: false },
@@ -55,9 +76,15 @@ const SECTIONS = [
 
 /**
  * Render the settings view.
+ * In share mode, shows only the category management section.
  * @param {HTMLElement} container - The view container element
  */
 export function renderSettingsView(container) {
+  if (isShareMode()) {
+    renderShareReferentielView(container);
+    return;
+  }
+
   const state = getState();
   const hasData = state.members.length > 0;
   const settings = state.settings || {};
@@ -76,6 +103,8 @@ export function renderSettingsView(container) {
 
     ${hasData ? renderMemberCard(state) : ''}
 
+    ${hasData ? renderObjectivesCard(state) : ''}
+
     ${renderThresholdsCard(settings)}
 
     ${renderExportCard(settings)}
@@ -83,6 +112,34 @@ export function renderSettingsView(container) {
     ${renderApiSourcesCard()}
 
     ${renderBackupCard(hasData)}
+  `;
+
+  bindSettingsEvents(container);
+}
+
+/**
+ * Render a simplified view for share mode — only category/skill management.
+ * @param {HTMLElement} container
+ */
+function renderShareReferentielView(container) {
+  const state = getState();
+  const hasData = state.members.length > 0;
+
+  container.innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1 class="page-header__title">Référentiel de compétences</h1>
+        <p class="page-header__subtitle">Modifiez les catégories et compétences — les changements sont sauvegardés pour tous</p>
+      </div>
+    </div>
+
+    ${hasData ? renderCategoryCard(state) : `
+      <div class="card">
+        <p style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+          Aucune donnée disponible dans ce partage.
+        </p>
+      </div>
+    `}
   `;
 
   bindSettingsEvents(container);
@@ -125,16 +182,19 @@ function renderCategoryCard(state) {
   let catHtml = '';
   for (const [catName, skills] of Object.entries(categories)) {
     catHtml += `
-      <div style="padding: var(--space-3); background: var(--color-bg-secondary); border-radius: var(--radius-lg);">
+      <div class="cat-card" data-category="${escapeHtml(catName)}" draggable="true">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2);">
-          <strong style="font-size: var(--font-size-sm);">${escapeHtml(catName)}</strong>
+          <div style="display: flex; align-items: center; gap: var(--space-2);">
+            <span class="cat-card__handle" aria-hidden="true">⠿</span>
+            <strong class="cat-card__title" title="Cliquer pour renommer" style="font-size: var(--font-size-sm); cursor: text;">${escapeHtml(catName)}</strong>
+          </div>
           <button class="btn btn--ghost btn--sm category-remove-btn" data-category="${escapeHtml(catName)}">✕</button>
         </div>
-        <div style="display: flex; flex-wrap: wrap; gap: var(--space-1);">
-          ${skills.map(s => `<span class="badge badge--info skill-remove-badge" data-category="${escapeHtml(catName)}" data-skill="${escapeHtml(s)}" title="Cliquer pour retirer de la categorie" style="cursor: pointer;">${escapeHtml(s)}</span>`).join('')}
+        <div class="skill-drop-zone" data-category="${escapeHtml(catName)}" style="display: flex; flex-wrap: wrap; gap: var(--space-1); min-height: 28px;">
+          ${skills.map(s => `<span class="badge badge--info skill-remove-badge" draggable="true" data-category="${escapeHtml(catName)}" data-skill="${escapeHtml(s)}" title="Glisser pour réordonner · Cliquer pour retirer" style="cursor: grab;">${escapeHtml(s)}</span>`).join('')}
         </div>
         <div style="display: flex; gap: var(--space-1); margin-top: var(--space-2);">
-          <input type="text" class="form-input add-skill-input" data-category="${escapeHtml(catName)}" placeholder="Nouvelle competence..." style="flex: 1; font-size: var(--font-size-xs); padding: 4px 8px;" />
+          <input type="text" class="form-input add-skill-input" data-category="${escapeHtml(catName)}" placeholder="Nouvelle compétence..." style="flex: 1; font-size: var(--font-size-xs); padding: 4px 8px;" />
           <button class="btn btn--ghost btn--sm add-skill-btn" data-category="${escapeHtml(catName)}">+</button>
         </div>
       </div>
@@ -144,9 +204,9 @@ function renderCategoryCard(state) {
   if (uncategorized.length > 0) {
     catHtml += `
       <div class="settings-categories-grid__uncategorized" style="padding: var(--space-3); background: var(--color-bg-tertiary); border-radius: var(--radius-lg); border: 1px dashed var(--color-border);">
-        <strong style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Non categorisees</strong>
-        <div style="display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2);">
-          ${uncategorized.map(s => `<span class="badge badge--neutral skill-uncategorized-badge" data-skill="${escapeHtml(s)}"><span class="skill-move-btn" data-skill="${escapeHtml(s)}" title="Assigner a une categorie">${escapeHtml(s)}</span><button class="skill-delete-btn" data-skill="${escapeHtml(s)}" title="Supprimer cette competence">✕</button></span>`).join('')}
+        <strong style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Non catégorisées</strong>
+        <div class="skill-drop-zone" data-category="__uncategorized__" style="display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); min-height: 28px;">
+          ${uncategorized.map(s => `<span class="badge badge--neutral skill-uncategorized-badge skill-remove-badge" draggable="true" data-category="__uncategorized__" data-skill="${escapeHtml(s)}" title="Glisser vers une catégorie · Cliquer pour assigner"><span class="skill-move-btn" data-skill="${escapeHtml(s)}">${escapeHtml(s)}</span><button class="skill-delete-btn" data-skill="${escapeHtml(s)}" aria-label="Supprimer cette compétence" title="Supprimer cette compétence">✕</button></span>`).join('')}
         </div>
       </div>
     `;
@@ -156,7 +216,10 @@ function renderCategoryCard(state) {
     <div class="card" id="settings-categories" style="margin-bottom: var(--space-6);">
       <div class="card__header">
         <h3 class="card__title">Gestion des categories</h3>
-        <button class="btn btn--secondary btn--sm" id="settings-auto-categorize">Auto-categoriser</button>
+        <div style="display: flex; gap: var(--space-2);">
+          <button class="btn btn--ghost btn--sm" id="settings-copy-slack" title="Copier le référentiel formaté pour Slack">📋 Copier pour Slack</button>
+          <button class="btn btn--secondary btn--sm" id="settings-auto-categorize">Auto-categoriser</button>
+        </div>
       </div>
       <div class="settings-categories-grid">
         ${catHtml}
@@ -188,15 +251,15 @@ function renderMemberCard(state) {
                    value="${escapeHtml(m.role)}" style="display: none;" />
           </div>
           <div class="settings-member-card__actions">
-            <button class="btn btn--ghost btn--sm member-edit-btn" title="Modifier">✏️</button>
-            <button class="btn btn--ghost btn--sm member-save-btn" title="Enregistrer" style="display: none;">✅</button>
-            <button class="btn btn--ghost btn--sm member-cancel-btn" title="Annuler" style="display: none;">❌</button>
-            <button class="btn btn--ghost btn--sm member-delete-btn" title="Supprimer">🗑</button>
+            <button class="btn btn--ghost btn--sm member-edit-btn" aria-label="Modifier le membre" title="Modifier">✏️</button>
+            <button class="btn btn--ghost btn--sm member-save-btn" aria-label="Enregistrer les modifications" title="Enregistrer" style="display: none;">✅</button>
+            <button class="btn btn--ghost btn--sm member-cancel-btn" aria-label="Annuler les modifications" title="Annuler" style="display: none;">❌</button>
+            <button class="btn btn--ghost btn--sm member-delete-btn" aria-label="Supprimer le membre" title="Supprimer">🗑</button>
           </div>
         </div>
         <div class="settings-member-card__fields">
           <div class="settings-member-card__field">
-            <span class="settings-member-card__label">Appetences</span>
+            <span class="settings-member-card__label">Appétences</span>
             <span class="member-display" data-field="appetences">${escapeHtml(m.appetences || '—')}</span>
             <input class="form-input member-edit-input" data-field="appetences" type="text"
                    value="${escapeHtml(m.appetences)}" style="display: none;" />
@@ -215,6 +278,11 @@ function renderMemberCard(state) {
     `;
   }).join('');
 
+  const groups = getAllGroups(state.members);
+  const roles = getAllRoles(state.members);
+  const groupSuggestions = groups.map(g => `<option value="${escapeHtml(g)}">`).join('');
+  const roleSuggestions = roles.map(r => `<option value="${escapeHtml(r)}">`).join('');
+
   return `
     <div class="card" id="settings-members" style="margin-bottom: var(--space-6);">
       <div class="card__header">
@@ -224,6 +292,77 @@ function renderMemberCard(state) {
       <div class="settings-members-grid">
         ${membersHtml}
       </div>
+      <datalist id="member-groups-suggestions">${groupSuggestions}</datalist>
+      <datalist id="member-role-suggestions">${roleSuggestions}</datalist>
+      <div class="member-add-form" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border);">
+        <p style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); margin-bottom: var(--space-3);">Ajouter un membre</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: var(--space-2); align-items: end;">
+          <div>
+            <label style="font-size: var(--font-size-xs); color: var(--color-text-secondary); display: block; margin-bottom: 4px;">Nom <span style="color: var(--color-danger-400);">*</span></label>
+            <input type="text" class="form-input" id="member-add-name" placeholder="Prénom Nom" />
+          </div>
+          <div>
+            <label style="font-size: var(--font-size-xs); color: var(--color-text-secondary); display: block; margin-bottom: 4px;">Rôle</label>
+            <input type="text" class="form-input" id="member-add-role" placeholder="Dev, PO..." list="member-role-suggestions" />
+          </div>
+          <div>
+            <label style="font-size: var(--font-size-xs); color: var(--color-text-secondary); display: block; margin-bottom: 4px;">Groupes</label>
+            <input type="text" class="form-input" id="member-add-groups" placeholder="Groupe1, Groupe2" list="member-groups-suggestions" />
+          </div>
+          <button class="btn btn--primary btn--sm" id="member-add-btn" style="white-space: nowrap;">+ Ajouter</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the objectives management card.
+ * Allows defining target thresholds per skill (min experts/confirmed).
+ * @param {Object} state - Application state
+ * @returns {string} Card HTML
+ */
+function renderObjectivesCard(state) {
+  const allSkills = getAllSkillNames(state.members);
+  const objectives = state.objectives || {};
+
+  // Compétences avec un objectif défini
+  const defined = Object.entries(objectives).filter(([skill]) => allSkills.includes(skill));
+  // Compétences sans objectif
+  const available = allSkills.filter(s => !objectives[s]);
+
+  return `
+    <div class="card" id="settings-objectives" style="margin-bottom: var(--space-6);">
+      <div class="card__header">
+        <h3 class="card__title">Objectifs d'équipe</h3>
+        <span class="badge badge--info">${defined.length} défini(s)</span>
+      </div>
+      <div style="padding: 0 var(--space-5) var(--space-4); font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+        Définissez un nombre minimum de Confirmés/Experts par compétence. La progression s'affiche dans le Dashboard.
+      </div>
+      <div class="objectives-settings-list" style="padding: 0 var(--space-5) var(--space-4);">
+        ${defined.map(([skill, obj]) => `
+          <div class="objective-setting-row" data-skill="${escapeHtml(skill)}">
+            <span class="objective-setting-row__name">${escapeHtml(skill)}</span>
+            <label class="objective-setting-row__label">
+              Cible :
+              <select class="form-select objective-target-select" data-skill="${escapeHtml(skill)}" style="width: 80px;">
+                ${[1, 2, 3, 4, 5].map(v => `<option value="${v}" ${(obj.minExperts || 2) === v ? 'selected' : ''}>${v}</option>`).join('')}
+              </select>
+            </label>
+            <button class="btn btn--ghost btn--sm objective-remove-btn" data-skill="${escapeHtml(skill)}" title="Retirer cet objectif">✕</button>
+          </div>
+        `).join('')}
+      </div>
+      ${available.length > 0 ? `
+        <div style="padding: 0 var(--space-5) var(--space-5); display: flex; gap: var(--space-2); align-items: center;">
+          <select class="form-select" id="objective-add-skill" style="flex: 1; max-width: 300px;">
+            <option value="">Ajouter une compétence...</option>
+            ${available.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}
+          </select>
+          <button class="btn btn--sm btn--primary" id="objective-add-btn">+ Ajouter</button>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -436,14 +575,102 @@ function renderBackupCard(hasData) {
  * @param {HTMLElement} container
  */
 function bindSettingsEvents(container) {
-  // --- Summary navigation ---
-  container.querySelectorAll('.settings-summary__link').forEach(link => {
+  // --- Copier pour Slack ---
+  container.querySelector('#settings-copy-slack')?.addEventListener('click', () => {
+    const { categories } = getState();
+    const lines = Object.entries(categories || {})
+      .filter(([, skills]) => skills.length > 0)
+      .map(([cat, skills]) => `## ${cat}\n${skills.map(s => `- ${s}`).join('\n')}`);
+    if (!lines.length) { toastWarning('Aucune catégorie à copier.'); return; }
+    navigator.clipboard.writeText(lines.join('\n\n'))
+      .then(() => toastSuccess('Référentiel copié pour Slack !'))
+      .catch(() => toastError('Impossible d\'accéder au presse-papiers.'));
+  });
+
+  // --- Drag and drop categories / skills ---
+  initDragDrop(container);
+
+  // --- Renommage inline des catégories ---
+  container.querySelectorAll('.cat-card__title').forEach(title => {
+    title.addEventListener('click', () => {
+      const card = title.closest('.cat-card');
+      const oldName = card.dataset.category;
+      let cancelled = false;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = oldName;
+      input.className = 'form-input';
+      input.style.cssText = 'font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); padding: 2px 6px; height: 24px; min-width: 80px;';
+      title.replaceWith(input);
+      input.select();
+
+      const commit = () => {
+        if (cancelled) return;
+        const newName = input.value.trim();
+        if (!newName || newName === oldName) { input.replaceWith(title); return; }
+        const state = getState();
+        if (state.categories[newName] !== undefined) {
+          toastError(`La catégorie « ${newName} » existe déjà.`);
+          setTimeout(() => input.select(), 0);
+          return;
+        }
+        const entries = Object.entries(state.categories);
+        const idx = entries.findIndex(([k]) => k === oldName);
+        if (idx < 0) return;
+        entries[idx] = [newName, entries[idx][1]];
+        updateCategories(Object.fromEntries(entries));
+        saveActiveTemplate();
+        toastSuccess(`Catégorie renommée en « ${newName} ».`);
+      };
+
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { cancelled = true; input.replaceWith(title); }
+      });
+    });
+  });
+
+  // --- Summary navigation (scroll + scrollspy) ---
+  const summaryLinks = container.querySelectorAll('.settings-summary__link');
+
+  const setActiveLink = (id) => {
+    summaryLinks.forEach(l => {
+      l.classList.toggle('settings-summary__link--active', l.dataset.target === id);
+    });
+  };
+
+  summaryLinks.forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
+      setActiveLink(link.dataset.target);
       const target = document.getElementById(link.dataset.target);
       if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   });
+
+  // Scrollspy : active le lien correspondant à la section visible
+  const sections = [...summaryLinks]
+    .map(l => document.getElementById(l.dataset.target))
+    .filter(Boolean);
+
+  if (sections.length && 'IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) setActiveLink(entry.target.id);
+      });
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+
+    sections.forEach(s => observer.observe(s));
+
+    // Nettoyage quand la vue est remplacée (re-render ou changement de vue)
+    const nav = container.querySelector('#settings-summary');
+    if (nav) {
+      const mo = new MutationObserver(() => observer.disconnect());
+      mo.observe(nav.parentNode || container, { childList: true, subtree: false });
+    }
+  }
 
   // --- Category management ---
   container.querySelector('#settings-auto-categorize')?.addEventListener('click', () => {
@@ -493,16 +720,7 @@ function bindSettingsEvents(container) {
       confirmClass: 'btn--primary',
       onConfirm: () => {
         updateCategories(newCats);
-        // Sauvegarder le template actif avec les nouvelles categories
-        const current = getState();
-        if (current.activeTemplate && !current.activeTemplate.builtIn) {
-          saveCustomTemplate({
-            title: current.activeTemplate.title,
-            description: current.activeTemplate.description || '',
-            members: current.members,
-            categories: newCats,
-          });
-        }
+        saveActiveTemplate();
         toastSuccess('Categories auto-generees et sauvegardees.');
       },
     });
@@ -560,8 +778,12 @@ function bindSettingsEvents(container) {
       });
       replaceMembers(members);
       saveActiveTemplate();
+      toastSuccess(`Compétence « ${skillName} » ajoutée dans ${catName}.`);
 
-      toastSuccess(`Competence « ${skillName} » ajoutee dans ${catName}.`);
+      // Re-focaliser l'input après le re-rendu déclenché par les mutations d'état
+      setTimeout(() => {
+        container.querySelector(`.add-skill-input[data-category="${catName}"]`)?.focus();
+      }, 0);
     });
   });
 
@@ -650,7 +872,7 @@ function bindSettingsEvents(container) {
       if (!confirmed) return;
       removeSkill(skillName);
       saveActiveTemplate();
-      toastSuccess(`Competence « ${skillName} » supprimee.`);
+      toastSuccess(`Compétence « ${skillName} » supprimée.`);
     });
   });
 
@@ -707,6 +929,68 @@ function bindSettingsEvents(container) {
       removeMember(memberId);
       saveActiveTemplate();
       toastSuccess(`Membre "${name}" supprime.`);
+    });
+  });
+
+  // --- Add member ---
+  const memberAddBtn = container.querySelector('#member-add-btn');
+  memberAddBtn?.addEventListener('click', () => {
+    const name = container.querySelector('#member-add-name')?.value.trim();
+    if (!name) {
+      toastError('Le nom est obligatoire.');
+      container.querySelector('#member-add-name')?.focus();
+      return;
+    }
+    const role = container.querySelector('#member-add-role')?.value.trim() || '';
+    const groupsRaw = container.querySelector('#member-add-groups')?.value.trim() || '';
+    const groups = groupsRaw ? groupsRaw.split(',').map(g => g.trim()).filter(Boolean) : [];
+
+    const state = getState();
+    const allSkillNames = getAllSkillNames(state.members);
+    const skills = Object.fromEntries(allSkillNames.map(s => [s, { level: 0, appetence: 0 }]));
+
+    const member = createMember({ name, role, groups, skills });
+    addMembers([member]);
+    saveActiveTemplate();
+    toastSuccess(`Membre « ${name} » ajouté.`);
+  });
+
+  container.querySelector('#member-add-name')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') memberAddBtn?.click();
+  });
+
+  // --- Objectifs d'équipe ---
+  container.querySelector('#objective-add-btn')?.addEventListener('click', () => {
+    const select = container.querySelector('#objective-add-skill');
+    const skill = select?.value;
+    if (!skill) return;
+    const state = getState();
+    const objectives = { ...state.objectives, [skill]: { minExperts: 2 } };
+    updateState({ objectives });
+    saveActiveTemplate();
+    toastSuccess(`Objectif ajouté pour « ${skill} ».`);
+  });
+
+  container.querySelectorAll('.objective-target-select').forEach(select => {
+    select.addEventListener('change', () => {
+      const skill = select.dataset.skill;
+      const val = parseInt(select.value, 10);
+      const state = getState();
+      const objectives = { ...state.objectives, [skill]: { minExperts: val } };
+      updateState({ objectives });
+      saveActiveTemplate();
+    });
+  });
+
+  container.querySelectorAll('.objective-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const skill = btn.dataset.skill;
+      const state = getState();
+      const objectives = { ...state.objectives };
+      delete objectives[skill];
+      updateState({ objectives });
+      saveActiveTemplate();
+      toastSuccess(`Objectif retiré pour « ${skill} ».`);
     });
   });
 
@@ -877,8 +1161,8 @@ function bindApiSourcesEvents(container) {
           return { ...m, skills: memberSkills };
         });
         replaceMembers(updatedMembers);
-        setStatus(sourceId, `${newSkills.length} competence(s) ajoutee(s)`, 'success');
-        toastSuccess(`${newSkills.length} competence(s) ajoutee(s) depuis "${source.name}".`);
+        setStatus(sourceId, `${newSkills.length} compétence(s) ajoutée(s)`, 'success');
+        toastSuccess(`${newSkills.length} compétence(s) ajoutée(s) depuis "${source.name}".`);
 
       } else if (source.type === 'groups') {
         const state = getState();
@@ -902,6 +1186,134 @@ function bindApiSourcesEvents(container) {
       removeApiSource(sourceId);
       toastInfo('Source supprimee.');
       renderSettingsView(container);
+    });
+  });
+}
+
+// ============================================================
+// Drag and drop — categories and skills
+// ============================================================
+
+/**
+ * Enable drag-and-drop reordering for category cards and skill badges.
+ * - Drag a category card handle → reorder categories (impacts column groups in the matrix)
+ * - Drag a skill badge → reorder within category or move to another category
+ * @param {HTMLElement} container
+ */
+function initDragDrop(container) {
+  let drag = null; // { type: 'cat'|'skill', category, skill? }
+
+  const clearFeedback = () => {
+    container.querySelectorAll('.cat-card--drag-over, .skill-drop-zone--drag-over')
+      .forEach(el => el.classList.remove('cat-card--drag-over', 'skill-drop-zone--drag-over'));
+  };
+
+  // Register skill badges FIRST so stopPropagation prevents card dragstart
+  container.querySelectorAll('.skill-remove-badge[draggable]').forEach(badge => {
+    badge.addEventListener('dragstart', e => {
+      drag = { type: 'skill', category: badge.dataset.category, skill: badge.dataset.skill };
+      e.dataTransfer.effectAllowed = 'move';
+      e.stopPropagation();
+    });
+  });
+
+  // Category cards
+  container.querySelectorAll('.cat-card').forEach(card => {
+    card.addEventListener('dragstart', e => {
+      drag = { type: 'cat', category: card.dataset.category };
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => card.classList.add('cat-card--dragging'), 0);
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('cat-card--dragging');
+      clearFeedback();
+      drag = null;
+    });
+    card.addEventListener('dragover', e => {
+      if (!drag || drag.type !== 'cat' || card.dataset.category === drag.category) return;
+      e.preventDefault();
+      clearFeedback();
+      card.classList.add('cat-card--drag-over');
+    });
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!drag || drag.type !== 'cat') return;
+      clearFeedback();
+      const fromCat = drag.category;
+      const toCat = card.dataset.category;
+      if (fromCat === toCat) return;
+      const entries = Object.entries(getState().categories);
+      const fi = entries.findIndex(([k]) => k === fromCat);
+      const ti = entries.findIndex(([k]) => k === toCat);
+      if (fi < 0 || ti < 0) return;
+      const [moved] = entries.splice(fi, 1);
+      entries.splice(ti, 0, moved);
+      const newOrder = entries.map(([k]) => k);
+      updateCategories(Object.fromEntries(entries));
+      saveActiveTemplate();
+      if (isEquipeMode()) {
+        fetch('/api/categories/order', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: newOrder }),
+        });
+      }
+      drag = null;
+    });
+  });
+
+  // Skill drop zones
+  container.querySelectorAll('.skill-drop-zone').forEach(zone => {
+    zone.addEventListener('dragover', e => {
+      if (!drag || drag.type !== 'skill') return;
+      e.preventDefault();
+      e.stopPropagation();
+      clearFeedback();
+      zone.classList.add('skill-drop-zone--drag-over');
+    });
+    zone.addEventListener('dragleave', e => {
+      if (!zone.contains(e.relatedTarget)) zone.classList.remove('skill-drop-zone--drag-over');
+    });
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!drag || drag.type !== 'skill') return;
+      e.stopPropagation();
+      zone.classList.remove('skill-drop-zone--drag-over');
+      const { category: fromCat, skill } = drag;
+      const toCat = zone.dataset.category;
+      const cats = JSON.parse(JSON.stringify(getState().categories));
+      const over = e.target.closest('.skill-remove-badge[data-skill]');
+
+      if (fromCat === toCat && toCat !== '__uncategorized__') {
+        // Réordonnement dans la même catégorie
+        const list = cats[toCat];
+        if (!list) { drag = null; return; }
+        const fromIdx = list.indexOf(skill);
+        const toIdx = over && over.dataset.skill !== skill ? list.indexOf(over.dataset.skill) : -1;
+        if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) { drag = null; return; }
+        list.splice(fromIdx, 1);
+        list.splice(toIdx, 0, skill);
+        updateCategories(cats);
+        saveActiveTemplate();
+        drag = null;
+        return;
+      }
+
+      // Déplacement entre catégories
+      if (fromCat !== '__uncategorized__' && cats[fromCat]) {
+        cats[fromCat] = cats[fromCat].filter(s => s !== skill);
+        if (cats[fromCat].length === 0) delete cats[fromCat];
+      }
+      if (toCat !== '__uncategorized__') {
+        if (!cats[toCat]) cats[toCat] = [];
+        if (!cats[toCat].includes(skill)) {
+          const idx = over ? cats[toCat].indexOf(over.dataset.skill) : -1;
+          idx >= 0 ? cats[toCat].splice(idx, 0, skill) : cats[toCat].push(skill);
+        }
+      }
+      updateCategories(cats);
+      saveActiveTemplate();
+      drag = null;
     });
   });
 }

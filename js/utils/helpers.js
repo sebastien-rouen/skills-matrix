@@ -151,6 +151,34 @@ export function sortBy(arr, key, ascending = true) {
 }
 
 /**
+ * Format a date as a relative time string (e.g. "il y a 5 min").
+ * @param {string|null} isoDate - ISO date string
+ * @returns {string} Relative time or empty string if no date
+ */
+export function timeAgo(isoDate) {
+  if (!isoDate) return '';
+  const now = Date.now();
+  const then = new Date(isoDate).getTime();
+  const diffMs = now - then;
+  if (diffMs < 0) return '';
+
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "à l'instant";
+  if (minutes < 60) return `il y a ${minutes} min`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `il y a ${hours}h`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `il y a ${days}j`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return `il y a ${months} mois`;
+
+  return `il y a ${Math.floor(months / 12)} an(s)`;
+}
+
+/**
  * Download a string as a file in the browser.
  * @param {string} content - File content
  * @param {string} filename - Download file name

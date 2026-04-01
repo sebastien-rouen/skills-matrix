@@ -26,3 +26,6 @@ shares.json
 
 # Logs
 *.log
+# PocketBase data (base de donnees locale)
+bdd/pb_data/
+bdd/pocketbase

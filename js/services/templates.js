@@ -1,242 +1,177 @@
 /**
- * Custom templates service.
- * Primary: JSON files in templates/ via Express API (/api/templates).
- * Fallback: localStorage when the server is not running.
+ * Service templates — lit et écrit dans la collection `skills_templates` (blob JSON).
+ * Source de vérité unique : PocketBase. Pas de fallback localStorage.
  */
 
 import { createMember } from '../models/data.js';
 import { downloadFile } from '../utils/helpers.js';
+import { getPb } from './pb-client.js';
 
-const API_URL = '/api/templates';
-const LS_KEY = 'skills-matrix-templates';
-
-/** @type {boolean|null} Cached server availability (null = not checked yet) */
-let serverAvailable = null;
+// ── API publique ──────────────────────────────────────────────────────────────
 
 /**
- * Check if the Express API server is reachable.
- * Caches the result for the session.
- * @returns {Promise<boolean>}
- */
-async function isServerAvailable() {
-  if (serverAvailable !== null) return serverAvailable;
-  try {
-    const res = await fetch(API_URL);
-    if (!res.ok) { serverAvailable = false; return false; }
-    const data = await res.json();
-    // Notre API retourne un tableau JSON — si ce n'est pas le cas, ce n'est pas notre serveur
-    serverAvailable = Array.isArray(data);
-  } catch {
-    serverAvailable = false;
-  }
-  return serverAvailable;
-}
-
-/**
- * Force re-check server availability (e.g. after a failed call).
- */
-function resetServerCheck() {
-  serverAvailable = null;
-}
-
-// ── localStorage helpers ──
-
-function getLSTemplates() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch { return []; }
-}
-
-function setLSTemplates(templates) {
-  localStorage.setItem(LS_KEY, JSON.stringify(templates));
-}
-
-// ── Public API ──
-
-/**
- * Get all templates (server files + localStorage fallback).
- * @returns {Promise<{templates: Object[], fromServer: boolean}>}
+ * Retourne la liste des templates disponibles depuis PocketBase.
+ * @returns {Promise<{ templates: Object[], fromServer: boolean }>}
  */
 export async function getCustomTemplates() {
-  const online = await isServerAvailable();
-
-  if (online) {
     try {
-      const res = await fetch(API_URL);
-      if (!res.ok) throw new Error('API error');
-      const index = await res.json();
-      const results = await Promise.all(
-        index.map(async (entry) => {
-          try {
-            const r = await fetch('templates/' + entry.file);
-            if (!r.ok) return null;
-            const tpl = await r.json();
-            // Propager le flag local/builtIn depuis l'index
-            tpl.local = !!entry.local;
-            tpl.builtIn = !entry.local;
-            return tpl;
-          } catch { return null; }
-        })
-      );
-      return { templates: results.filter(Boolean), fromServer: true };
+        const items = await getPb()
+            .collection('skills_templates')
+            .getFullList({ sort: 'ordre,title' });
+        const templates = items.map(t => ({
+            id:          t.slug,
+            pbId:        t.id,
+            title:       t.title,
+            description: t.description || '',
+            builtIn:     !!t.built_in,
+            local:       true,
+        }));
+        return { templates, fromServer: true };
     } catch {
-      resetServerCheck();
+        return { templates: [], fromServer: false };
     }
-  }
-
-  // Fallback localStorage (tous les templates LS sont "locaux")
-  const lsTemplates = getLSTemplates().map(t => ({ ...t, local: true, builtIn: false }));
-  return { templates: lsTemplates, fromServer: false };
 }
 
 /**
- * Create a new template.
- * Tries the API first, falls back to localStorage.
- * @param {Object} template - { title, description, members, categories }
- * @returns {Promise<{success: boolean, fromServer: boolean, data?: Object}>}
- */
-export async function saveCustomTemplate(template) {
-  const id = slugify(template.title);
-  const payload = {
-    id,
-    title: template.title,
-    description: template.description || '',
-    members: template.members,
-    categories: template.categories || {},
-  };
-
-  const online = await isServerAvailable();
-
-  if (online) {
-    try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return { success: true, fromServer: true, data };
-      }
-      // Le serveur a repondu mais refuse (405, 500…) — fallback localStorage
-    } catch {
-      // Erreur reseau — fallback localStorage
-    }
-    resetServerCheck();
-  }
-
-  // Fallback localStorage
-  const entry = { ...payload, createdAt: new Date().toISOString() };
-  const templates = getLSTemplates();
-  const idx = templates.findIndex(t => t.id === id);
-  if (idx >= 0) templates[idx] = entry;
-  else templates.push(entry);
-  setLSTemplates(templates);
-  return { success: true, fromServer: false, data: entry };
-}
-
-/**
- * Delete a template by id.
- * Tries the API first, falls back to localStorage.
- * @param {string} id - Template id
- * @returns {Promise<{success: boolean, fromServer: boolean}>}
- */
-export async function deleteCustomTemplate(id) {
-  const online = await isServerAvailable();
-
-  if (online) {
-    try {
-      const res = await fetch(`${API_URL}/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      if (res.ok) return { success: true, fromServer: true };
-      if (res.status === 403) return { success: false, fromServer: true, reason: 'builtin' };
-    } catch {
-      resetServerCheck();
-    }
-  }
-
-  // Fallback localStorage
-  const templates = getLSTemplates();
-  const filtered = templates.filter(t => t.id !== id);
-  if (filtered.length === templates.length) return { success: false, fromServer: false };
-  setLSTemplates(filtered);
-  return { success: true, fromServer: false };
-}
-
-/**
- * Load a template's data by id.
- * Assigns fresh IDs to members via createMember.
- * @param {string} id - Template id
- * @returns {Promise<Object|null>} { members, categories } or null
+ * Charge les données complètes d'un template (membres + catégories).
+ * @param {string} id - Slug du template
+ * @returns {Promise<{ members: Object[], categories: Object }|null>}
  */
 export async function loadCustomTemplate(id) {
-  const { templates } = await getCustomTemplates();
-  const tpl = templates.find(t => t.id === id);
-  if (!tpl) return null;
-
-  const members = tpl.members.map(m =>
-    createMember({
-      name: m.name,
-      role: m.role,
-      appetences: m.appetences || '',
-      groups: m.groups || [],
-      skills: m.skills,
-    })
-  );
-
-  return { members, categories: tpl.categories || {} };
+    try {
+        const tpl = await getPb()
+            .collection('skills_templates')
+            .getFirstListItem(`slug="${id}"`, { requestKey: null });
+        const raw = tpl.data || {};
+        const members = (raw.members || []).map(m =>
+            createMember({
+                name:       m.name,
+                role:       m.role       || '',
+                appetences: m.appetences || '',
+                groups:     m.groups     || [],
+                skills:     m.skills     || {},
+            })
+        );
+        const categories = applyOrderedCategories(raw.categories || {}, raw.categoryOrder);
+        return { members, categories };
+    } catch {
+        return null;
+    }
 }
 
 /**
- * Export a template as a downloadable JSON file.
- * @param {Object} template - Template object to export
+ * Crée ou met à jour un template dans PocketBase.
+ * @param {Object} template - { title, description, members, categories }
+ * @returns {Promise<{ success: boolean, fromServer: boolean, data?: Object }>}
+ */
+export async function saveCustomTemplate(template) {
+    try {
+        const slug = slugify(template.title);
+        const rec = await getPb().collection('skills_templates').create({
+            slug,
+            title:       template.title,
+            description: template.description || '',
+            built_in:    false,
+            ordre:       100,
+            data: {
+                members:    template.members    || [],
+                categories: template.categories || {},
+            },
+        });
+        return { success: true, fromServer: true, data: { id: slug, pbId: rec.id } };
+    } catch {
+        return { success: false, fromServer: false };
+    }
+}
+
+/**
+ * Met à jour les données d'un template existant dans PocketBase (members + categories).
+ * Fonctionne pour tous les templates, y compris les builtIn.
+ * @param {string} id - Slug du template
+ * @param {Object} data - { members, categories }
+ * @returns {Promise<boolean>} Succès
+ */
+export async function updateCustomTemplate(id, data) {
+    try {
+        const categoryOrder = Object.keys(data.categories || {});
+        const res = await fetch(`/api/templates/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ members: data.members, categories: data.categories, categoryOrder }),
+        });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Supprime un template depuis PocketBase.
+ * @param {string} id - Slug du template
+ * @returns {Promise<{ success: boolean, fromServer: boolean }>}
+ */
+export async function deleteCustomTemplate(id) {
+    try {
+        const tpl = await getPb()
+            .collection('skills_templates')
+            .getFirstListItem(`slug="${id}"`);
+        if (tpl.built_in) return { success: false, fromServer: true };
+        await getPb().collection('skills_templates').delete(tpl.id);
+        return { success: true, fromServer: true };
+    } catch {
+        return { success: false, fromServer: false };
+    }
+}
+
+/**
+ * Exporte un template en fichier JSON téléchargeable.
  */
 export function exportTemplateAsFile(template) {
-  const data = {
-    id: template.id,
-    title: template.title,
-    description: template.description || '',
-    members: template.members,
-    categories: template.categories || {},
-  };
-  const filename = (template.id || 'template') + '.json';
-  downloadFile(JSON.stringify(data, null, 2), filename, 'application/json');
+    const data = { id: template.id, title: template.title,
+        description: template.description || '', members: template.members,
+        categories: template.categories || {} };
+    downloadFile(JSON.stringify(data, null, 2), (template.id || 'template') + '.json', 'application/json');
 }
 
 /**
- * Import a template from a JSON file content string.
- * @param {string} jsonString - Raw JSON string
- * @returns {Promise<{success: boolean, fromServer: boolean, data?: Object}|null>}
+ * Importe un template depuis une chaîne JSON.
  */
 export async function importTemplateFromFile(jsonString) {
-  try {
-    const data = JSON.parse(jsonString);
-    if (!data.members || !Array.isArray(data.members)) {
-      throw new Error('Format invalide : tableau members manquant');
+    try {
+        const data = JSON.parse(jsonString);
+        if (!data.members || !Array.isArray(data.members)) {
+            throw new Error('Format invalide : tableau members manquant');
+        }
+        return await saveCustomTemplate({ title: data.title || 'Template importé',
+            description: data.description || '', members: data.members,
+            categories: data.categories || {} });
+    } catch (err) {
+        console.error('[Templates] Import échoué :', err);
+        return null;
     }
-    return await saveCustomTemplate({
-      title: data.title || 'Template importe',
-      description: data.description || '',
-      members: data.members,
-      categories: data.categories || {},
-    });
-  } catch (err) {
-    console.error('[Templates] Import failed:', err);
-    return null;
-  }
 }
 
 /**
- * Slugify a string for use as template ID / filename.
- * @param {string} str
- * @returns {string}
+ * Reorder a categories object using an explicit order array.
+ * Fallback: original key insertion order if categoryOrder is absent.
+ * @param {Object} categories - { catName: [skills] }
+ * @param {string[]} [categoryOrder] - Explicit ordered category names
+ * @returns {Object} Categories in correct order
  */
+export function applyOrderedCategories(categories, categoryOrder) {
+    if (!categoryOrder || !categoryOrder.length) return categories;
+    const ordered = {};
+    for (const name of categoryOrder) {
+        if (categories[name] !== undefined) ordered[name] = categories[name];
+    }
+    // Ajouter les catégories non listées dans categoryOrder (sécurité)
+    for (const [name, skills] of Object.entries(categories)) {
+        if (!(name in ordered)) ordered[name] = skills;
+    }
+    return ordered;
+}
+
 function slugify(str) {
-  return str
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+    return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }

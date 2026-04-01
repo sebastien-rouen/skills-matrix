@@ -9,7 +9,7 @@ import { renderFilters, applyFilters } from '../components/filters.js';
 import { toastSuccess } from '../components/toast.js';
 import {
   getInitials, getSkillLabel, getAppetenceIcon, escapeHtml,
-  SKILL_LEVELS, APPETENCE_LEVELS, downloadFile,
+  SKILL_LEVELS, APPETENCE_LEVELS, downloadFile, timeAgo,
 } from '../utils/helpers.js';
 import { exportCSV, exportDetailedCSV } from '../services/exporter.js';
 import { renderOnboarding } from '../components/onboarding.js';
@@ -18,14 +18,53 @@ import { renderShareMemberBanner } from '../components/share-bar.js';
 /** @type {Object|null} Current sort configuration */
 let sortConfig = { key: null, ascending: true };
 
+/** @type {boolean} Inhibe la restauration du scroll (ex : après un tri) */
+let _skipScrollRestore = false;
+
+/** @type {'default'|'transposed'} Disposition du tableau */
+let matrixLayout = 'default';
+
+/** Lit la disposition depuis le hash (#matrix/transposed). */
+function getLayoutFromHash() {
+  return location.hash.replace('#', '').split('/')[1] === 'transposed' ? 'transposed' : 'default';
+}
+
+/** Écrit la disposition dans le hash sans créer d'entrée d'historique. */
+function setLayoutInHash(layout) {
+  const view = location.hash.replace('#', '').split('/')[0] || 'matrix';
+  const newHash = layout === 'transposed' ? `#${view}/transposed` : `#${view}`;
+  history.replaceState(null, '', location.search + newHash);
+}
+
 /** @type {HTMLElement|null} Currently open inline editor */
 let activeEditor = null;
+
+/** @type {Function|null} Référence au listener document 'click' pour pouvoir le retirer */
+let _closeEditorListener = null;
+
+/**
+ * Nettoie les effets de bord de la vue matrice (tooltip, listener document).
+ * À appeler lors du changement de vue.
+ */
+export function cleanupMatrixView() {
+  if (_closeEditorListener) {
+    document.removeEventListener('click', _closeEditorListener);
+    _closeEditorListener = null;
+  }
+  teardownKeyboardNavigation();
+  const tooltip = document.getElementById('matrix-skill-tooltip');
+  if (tooltip) tooltip.remove();
+  closeActiveEditor(true);
+}
 
 /**
  * Render the matrix view.
  * @param {HTMLElement} container - The view container element
  */
 export function renderMatrixView(container) {
+  // Synchronise la disposition depuis le hash (refresh ou lien direct)
+  matrixLayout = getLayoutFromHash();
+
   const state = getState();
 
   if (state.members.length === 0) {
@@ -48,6 +87,13 @@ export function renderMatrixView(container) {
   const inShareMode = isShareMode();
   const shareMember = getShareMemberName();
 
+  // Préserver la position de scroll avant le re-render (sauf après un tri)
+  const skipRestore = _skipScrollRestore;
+  _skipScrollRestore = false;
+  const prevTableContainer = container.querySelector('#matrix-table-container');
+  const savedScrollTop = prevTableContainer?.scrollTop ?? 0;
+  const savedScrollLeft = prevTableContainer?.scrollLeft ?? 0;
+
   container.innerHTML = `
     <div class="page-header">
       <div>
@@ -66,7 +112,7 @@ export function renderMatrixView(container) {
 
     <div id="matrix-filters"></div>
 
-    <!-- Legend -->
+    <!-- Legend + Toggle de vue -->
     <div class="legend" style="margin-bottom: var(--space-4);">
       ${SKILL_LEVELS.map(l => `
         <div class="legend__item">
@@ -76,14 +122,30 @@ export function renderMatrixView(container) {
       `).join('')}
       <div class="legend__separator"></div>
       <div class="legend__item">
-        <span style="color: #FCA5A5; font-size: var(--font-size-base);">&#9888;</span>
+        <span style="color: var(--color-level-beginner); font-size: var(--font-size-base);">&#9888;</span>
         <span>Critique (&lt; ${threshold} expert(s))</span>
+      </div>
+      <div class="matrix-layout-toggle" style="margin-left: auto;">
+        <button class="matrix-layout-btn ${matrixLayout === 'default' ? 'matrix-layout-btn--active' : ''}"
+                id="matrix-layout-default"
+                aria-label="Vue par défaut : membres en lignes, compétences en colonnes"
+                title="Vue par défaut : membres en lignes, compétences en colonnes">
+          ⊞ Membres × Compétences
+        </button>
+        <button class="matrix-layout-btn ${matrixLayout === 'transposed' ? 'matrix-layout-btn--active' : ''}"
+                id="matrix-layout-transposed"
+                aria-label="Vue transposée : compétences en lignes, membres en colonnes"
+                title="Vue transposée : compétences en lignes, membres en colonnes">
+          ⊟ Compétences × Membres
+        </button>
       </div>
     </div>
 
     <!-- Matrix Table -->
     <div class="matrix-container" id="matrix-table-container">
-      ${renderTable(sortedMembers, groupedSkills, state)}
+      ${matrixLayout === 'transposed'
+        ? renderTransposedTable(sortedMembers, groupedSkills, state)
+        : renderTable(sortedMembers, groupedSkills, state)}
     </div>
   `;
 
@@ -102,6 +164,13 @@ export function renderMatrixView(container) {
   renderFilters(container.querySelector('#matrix-filters'));
 
   bindMatrixEvents(container, state);
+
+  // Restaurer la position de scroll après le re-render (pas après un tri)
+  const newTableContainer = container.querySelector('#matrix-table-container');
+  if (newTableContainer && !skipRestore && (savedScrollTop || savedScrollLeft)) {
+    newTableContainer.scrollTop = savedScrollTop;
+    newTableContainer.scrollLeft = savedScrollLeft;
+  }
 }
 
 /**
@@ -173,9 +242,11 @@ function renderTable(members, groupedSkills, state) {
       ? skill.substring(0, maxLen - 1) + '…'
       : skill;
     const catStart = categoryStartSkills.has(skill) ? ' category-start' : '';
-    html += `<th class="${catStart}" data-skill-header="${escapeHtml(skill)}">
+    const isTruncated = maxLen > 0 && skill.length > maxLen;
+    const tooltipAttr = isTruncated ? ` data-tooltip="${escapeHtml(skill)}"` : '';
+    html += `<th class="${catStart}" data-skill-header="${escapeHtml(skill)}"${tooltipAttr}>
       <span class="skill-name" data-rename-skill="${escapeHtml(skill)}" style="cursor: pointer;" title="Cliquer pour renommer">
-        ${escapeHtml(displayName)}${critical ? ' <span style="color: #FCA5A5;" title="Compétence critique">⚠</span>' : ''}
+        ${escapeHtml(displayName)}${critical ? ' <span style="color: var(--color-level-beginner);" title="Compétence critique">⚠</span>' : ''}
       </span>
       <span class="sort-header" data-sort="skill:${skill}" style="cursor: pointer;" title="Trier">
         ${getSortIndicator('skill:' + skill)}
@@ -192,11 +263,13 @@ function renderTable(members, groupedSkills, state) {
     const isShareTarget = shareMode && member.name === shareTarget;
     const isShareLocked = shareMode && member.name !== shareTarget;
     html += `<tr class="${isShareTarget ? 'matrix-row--share-active' : ''}${isShareLocked ? ' matrix-row--share-locked' : ''}">`;
+    const lastUp = timeAgo(member.lastUpdated);
     html += `<td>
       <div class="member-name editable-cell" data-member-id="${member.id}" data-field="name">
         <div class="member-avatar">${getInitials(member.name)}</div>
         <div>
           <div>${escapeHtml(member.name)}</div>
+          ${lastUp ? `<div class="member-last-updated" title="${new Date(member.lastUpdated).toLocaleString('fr-FR')}">${lastUp}</div>` : ''}
         </div>
       </div>
     </td>`;
@@ -240,6 +313,89 @@ function renderTable(members, groupedSkills, state) {
   }
   html += '</tbody></table>';
 
+  return html;
+}
+
+/**
+ * Render the transposed matrix table (skills as rows, members as columns).
+ * @param {Object[]} members - Filtered & sorted members
+ * @param {Object} groupedSkills - Skills grouped by category
+ * @param {Object} state - Current app state
+ * @returns {string} Table HTML
+ */
+function renderTransposedTable(members, groupedSkills, state) {
+  const flatSkills = [];
+  const skillToCategory = {};
+  for (const [catName, skills] of Object.entries(groupedSkills)) {
+    for (const skill of skills) {
+      flatSkills.push(skill);
+      skillToCategory[skill] = catName;
+    }
+  }
+
+  if (members.length === 0 || flatSkills.length === 0) {
+    return '<p style="padding: var(--space-6); text-align: center; color: var(--color-text-secondary);">Aucun résultat avec les filtres actuels.</p>';
+  }
+
+  const threshold = state.settings?.criticalThreshold ?? 2;
+  const shareMode = isShareMode();
+  const shareTarget = getShareMemberName();
+
+  let html = '<table class="matrix-table matrix-table--transposed">';
+
+  // En-tête : une colonne par membre
+  html += '<thead><tr><th class="transposed-skill-col">Compétence</th>';
+  for (const member of members) {
+    const isShareTarget = shareMode && member.name === shareTarget;
+    const firstRole = member.role ? member.role.split(',')[0].trim() : '';
+    html += `<th class="transposed-member-header${isShareTarget ? ' transposed-member-header--active' : ''}">
+      <div class="transposed-member-card">
+        <div class="member-avatar">${getInitials(member.name)}</div>
+        <div class="transposed-member-name" title="${escapeHtml(member.name)}">${escapeHtml(member.name)}</div>
+        ${firstRole ? `<div class="transposed-member-role" title="${escapeHtml(firstRole)}">${escapeHtml(firstRole)}</div>` : ''}
+      </div>
+    </th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  let lastCat = null;
+  for (const skill of flatSkills) {
+    const cat = skillToCategory[skill];
+    // Ligne séparateur de catégorie
+    if (cat !== lastCat) {
+      lastCat = cat;
+      html += `<tr class="transposed-category-row"><th colspan="${members.length + 1}">${escapeHtml(cat)}</th></tr>`;
+    }
+
+    const critical = isSkillCritical(state.members, skill, threshold);
+
+    html += '<tr>';
+    html += `<th class="transposed-skill-label">
+      <span class="skill-name" data-rename-skill="${escapeHtml(skill)}" style="cursor: pointer;" title="Cliquer pour renommer">
+        ${escapeHtml(skill)}${critical ? ' <span style="color: var(--color-level-beginner);" title="Compétence critique">⚠</span>' : ''}
+      </span>
+    </th>`;
+
+    for (const member of members) {
+      const isShareLocked = shareMode && member.name !== shareTarget;
+      const entry = member.skills[skill];
+      const level = entry?.level ?? 0;
+      const appetence = entry?.appetence ?? 0;
+      const appetenceIcon = getAppetenceIcon(appetence);
+      html += `<td>
+        <div class="skill-cell skill-cell--level-${level}${isShareLocked ? ' skill-cell--locked' : ''}"
+             data-member-id="${member.id}" data-skill="${escapeHtml(skill)}"
+             data-level="${level}" data-appetence="${appetence}"
+             title="${escapeHtml(member.name)} · ${escapeHtml(skill)} : ${getSkillLabel(level)}${appetence > 0 ? ' · Appétence : ' + APPETENCE_LEVELS[appetence]?.label : ''}">
+          <span class="skill-cell__level">${level > 0 ? level : '·'}</span>
+          ${appetenceIcon ? `<span class="skill-cell__appetence">${appetenceIcon}</span>` : ''}
+        </div>
+      </td>`;
+    }
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
   return html;
 }
 
@@ -324,10 +480,40 @@ function bindMatrixEvents(container, state) {
   const inShareMode = isShareMode();
   const shareMember = getShareMemberName();
 
-  // Trouver l'ID du membre selectionne en mode partage
+  // Trouver l'ID du membre sélectionné en mode partage
   const shareMemberId = inShareMode && shareMember
     ? state.members.find(m => m.name === shareMember)?.id
     : null;
+
+  // Tooltips sur les en-têtes tronqués (fixed, échappe au overflow du container)
+  let tooltip = document.getElementById('matrix-skill-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'matrix-skill-tooltip';
+    tooltip.className = 'matrix-skill-tooltip';
+    document.body.appendChild(tooltip);
+  }
+  container.querySelectorAll('th[data-tooltip]').forEach(th => {
+    th.addEventListener('mouseenter', () => {
+      tooltip.textContent = th.dataset.tooltip;
+      const r = th.getBoundingClientRect();
+      tooltip.style.left = (r.left + r.width / 2) + 'px';
+      tooltip.style.top = (r.top - 8) + 'px';
+      tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
+      tooltip.classList.add('matrix-skill-tooltip--visible');
+    });
+    th.addEventListener('mouseleave', () => {
+      tooltip.classList.remove('matrix-skill-tooltip--visible');
+    });
+  });
+
+  // Toggle de disposition (défaut / transposé) — met à jour le hash sans créer d'entrée d'historique
+  container.querySelector('#matrix-layout-default')?.addEventListener('click', () => {
+    if (matrixLayout !== 'default') { setLayoutInHash('default'); renderMatrixView(container); }
+  });
+  container.querySelector('#matrix-layout-transposed')?.addEventListener('click', () => {
+    if (matrixLayout !== 'transposed') { setLayoutInHash('transposed'); renderMatrixView(container); }
+  });
 
   // Sort headers
   container.querySelectorAll('.sort-header').forEach(header => {
@@ -338,6 +524,7 @@ function bindMatrixEvents(container, state) {
       } else {
         sortConfig = { key, ascending: true };
       }
+      _skipScrollRestore = true;
       renderMatrixView(container);
     });
   });
@@ -346,7 +533,7 @@ function bindMatrixEvents(container, state) {
   container.querySelectorAll('.skill-cell').forEach(cell => {
     cell.addEventListener('click', (e) => {
       e.stopPropagation();
-      // En mode partage, seul le membre selectionne peut editer ses cellules
+      // En mode partage, seul le membre sélectionné peut éditer ses cellules
       if (inShareMode) {
         if (!shareMemberId || cell.dataset.memberId !== shareMemberId) return;
       }
@@ -372,7 +559,7 @@ function bindMatrixEvents(container, state) {
       });
     });
 
-    // Clic sur le nom d'une competence → renommer
+    // Clic sur le nom d'une compétence → renommer
     container.querySelectorAll('[data-rename-skill]').forEach(span => {
       span.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -383,8 +570,13 @@ function bindMatrixEvents(container, state) {
     });
   }
 
-  // Close editor on outside click
+  // Close editor on outside click (retrait de l'ancien listener avant d'ajouter le nouveau)
+  if (_closeEditorListener) document.removeEventListener('click', _closeEditorListener);
+  _closeEditorListener = closeActiveEditor;
   document.addEventListener('click', closeActiveEditor);
+
+  // Navigation clavier (flèches, Entrée, Échap)
+  setupKeyboardNavigation(container);
 
   // Export buttons (masques en mode partage)
   if (!inShareMode) {
@@ -524,7 +716,9 @@ function openNameEditor(cell, memberId, viewContainer) {
   input.focus();
   input.select();
 
+  let cancelled = false;
   const commit = () => {
+    if (cancelled) return;
     const newName = input.value.trim();
     if (newName && newName !== member.name) {
       updateMember(memberId, { name: newName });
@@ -535,7 +729,7 @@ function openNameEditor(cell, memberId, viewContainer) {
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') commit();
-    if (e.key === 'Escape') closeActiveEditor();
+    if (e.key === 'Escape') { cancelled = true; closeActiveEditor(); }
   });
   input.addEventListener('blur', () => {
     // Small delay to allow click events inside editor
@@ -556,7 +750,7 @@ function openSkillRenameEditor(th, oldName, viewContainer) {
   const editor = document.createElement('div');
   editor.className = 'inline-edit';
   editor.innerHTML = `
-    <div class="inline-edit__label">Renommer la competence</div>
+    <div class="inline-edit__label">Renommer la compétence</div>
     <input type="text" class="inline-edit__input" value="${escapeHtml(oldName)}" />
   `;
 
@@ -576,7 +770,7 @@ function openSkillRenameEditor(th, oldName, viewContainer) {
     const newName = input.value.trim();
     if (newName && newName !== oldName) {
       renameSkill(oldName, newName);
-      toastSuccess(`Competence renommee : « ${newName} »`);
+      toastSuccess(`Compétence renommée : « ${newName} »`);
       renderMatrixView(viewContainer);
     }
     closeActiveEditor();
@@ -647,7 +841,7 @@ function openChipEditor(cell, memberId, field, state, viewContainer) {
       </div>
       <div style="margin-top: 6px; display: flex; gap: 4px;">
         <input type="text" class="inline-edit__input" placeholder="Ajouter..." style="flex: 1;" />
-        <button class="inline-edit__add-btn" title="Ajouter">+</button>
+        <button class="inline-edit__add-btn" aria-label="Ajouter" title="Ajouter">+</button>
       </div>
     `;
     bindChipEditorEvents();
@@ -761,7 +955,7 @@ function openGroupsEditor(cell, memberId, state, viewContainer) {
       </div>
       <div style="margin-top: 6px; display: flex; gap: 4px;">
         <input type="text" class="inline-edit__input" placeholder="Ajouter..." style="flex: 1;" />
-        <button class="inline-edit__add-btn" title="Ajouter">+</button>
+        <button class="inline-edit__add-btn" aria-label="Ajouter" title="Ajouter">+</button>
       </div>
     `;
     bindEditorEvents();
@@ -847,5 +1041,93 @@ function closeActiveEditor(silent = false) {
     activeEditor.remove();
     activeEditor = null;
     if (onClose) onClose();
+  }
+}
+
+// ── Keyboard navigation ─────────────────────────────────────────────────────
+
+/** @type {Function|null} Référence au listener clavier pour le retirer proprement */
+let _keyboardListener = null;
+
+/**
+ * Active la navigation clavier dans la matrice.
+ * Flèches pour se déplacer, Entrée pour éditer, Échap pour fermer.
+ * @param {HTMLElement} container - Le conteneur de la vue matrice
+ */
+function setupKeyboardNavigation(container) {
+  if (_keyboardListener) {
+    document.removeEventListener('keydown', _keyboardListener);
+    _keyboardListener = null;
+  }
+
+  _keyboardListener = (e) => {
+    // Ignorer si un input/textarea est focalisé (filtres, éditeurs)
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    // Ignorer si un éditeur inline est ouvert
+    if (activeEditor) return;
+
+    const table = container.querySelector('.matrix-table');
+    if (!table) return;
+
+    const cells = table.querySelectorAll('td .skill-cell');
+    if (cells.length === 0) return;
+
+    const focused = container.querySelector('.skill-cell--focused');
+
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+
+      if (!focused) {
+        // Première pression : focaliser la première cellule
+        cells[0]?.classList.add('skill-cell--focused');
+        cells[0]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        return;
+      }
+
+      const allCells = Array.from(cells);
+      const currentIdx = allCells.indexOf(focused);
+      if (currentIdx === -1) return;
+
+      // Calculer la grille : nombre de colonnes = cellules par ligne
+      const row = focused.closest('tr');
+      const colsInRow = row ? row.querySelectorAll('.skill-cell').length : 1;
+
+      let nextIdx = currentIdx;
+      if (e.key === 'ArrowRight') nextIdx = Math.min(currentIdx + 1, allCells.length - 1);
+      else if (e.key === 'ArrowLeft') nextIdx = Math.max(currentIdx - 1, 0);
+      else if (e.key === 'ArrowDown') nextIdx = Math.min(currentIdx + colsInRow, allCells.length - 1);
+      else if (e.key === 'ArrowUp') nextIdx = Math.max(currentIdx - colsInRow, 0);
+
+      if (nextIdx !== currentIdx) {
+        focused.classList.remove('skill-cell--focused');
+        allCells[nextIdx].classList.add('skill-cell--focused');
+        allCells[nextIdx].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+      return;
+    }
+
+    if (e.key === 'Enter' && focused) {
+      e.preventDefault();
+      focused.click();
+      return;
+    }
+
+    if (e.key === 'Escape' && focused) {
+      focused.classList.remove('skill-cell--focused');
+      return;
+    }
+  };
+
+  document.addEventListener('keydown', _keyboardListener);
+}
+
+/**
+ * Retire le listener clavier de la matrice.
+ */
+function teardownKeyboardNavigation() {
+  if (_keyboardListener) {
+    document.removeEventListener('keydown', _keyboardListener);
+    _keyboardListener = null;
   }
 }

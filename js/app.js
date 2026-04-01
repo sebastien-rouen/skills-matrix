@@ -1,20 +1,21 @@
 /**
  * Application entry point.
  * Initializes state, renders the UI, and manages view routing.
- * Supports share mode via ?share=TOKEN URL parameter.
+ * Supports share mode via ?share=TOKEN and équipe mode via ?equipe=CODE.
  */
 
-import { initState, on, getState, updateState, replaceMembers, updateCategories, isShareMode } from './state.js';
+import { initState, initFromPocketBase, on, getState, updateState, replaceMembers, updateCategories, isShareMode } from './state.js';
 import { renderSidebar, navigateTo, setAutoSavePaused } from './components/sidebar.js';
 import { initToasts, toastError } from './components/toast.js';
-import { renderMatrixView } from './views/matrix.js';
+import { renderMatrixView, cleanupMatrixView } from './views/matrix.js';
 import { renderDashboardView } from './views/dashboard.js';
 import { renderRadarView, destroyRadarChart } from './views/radar.js';
 import { renderImportView } from './views/import.js';
 import { renderSettingsView } from './views/settings.js';
-import { loadCustomTemplate } from './services/templates.js';
+import { loadCustomTemplate, applyOrderedCategories } from './services/templates.js';
 import { getShareTokenFromURL, loadSharedTemplate, clearShareSession } from './services/share.js';
 import { showMemberSelectModal, initShareAutoSave } from './components/share-bar.js';
+import { initCommandPalette } from './components/command-palette.js';
 
 /** @type {Object<string, Function>} View renderers mapped by view ID */
 const VIEW_RENDERERS = {
@@ -26,17 +27,18 @@ const VIEW_RENDERERS = {
 };
 
 /** @type {string[]} Vues accessibles en mode partage */
-const SHARE_ALLOWED_VIEWS = ['matrix', 'dashboard', 'radar'];
+const SHARE_ALLOWED_VIEWS = ['matrix', 'dashboard', 'radar', 'settings'];
 
 /** @type {string} Currently active view */
 let currentView = 'matrix';
 
 /**
  * Read the view ID from the current URL hash.
+ * Supports optional sub-params after "/" (e.g. "#matrix/transposed").
  * @returns {string|null} Valid view ID or null
  */
 function getViewFromHash() {
-  const hash = location.hash.replace('#', '');
+  const hash = location.hash.replace('#', '').split('/')[0];
   return VIEW_RENDERERS[hash] ? hash : null;
 }
 
@@ -47,7 +49,7 @@ function getViewFromHash() {
 async function reloadActiveTemplate() {
   const state = getState();
   const tpl = state.activeTemplate;
-  if (!tpl || tpl.builtIn) return;
+  if (!tpl?.id) return;
 
   try {
     setAutoSavePaused(true);
@@ -55,13 +57,35 @@ async function reloadActiveTemplate() {
     if (data) {
       replaceMembers(data.members);
       updateCategories(data.categories);
-      console.log('[App] Template rechargé depuis le fichier :', tpl.title);
     }
-  } catch (err) {
-    console.warn('[App] Impossible de recharger le template :', err.message);
   } finally {
     setAutoSavePaused(false);
   }
+}
+
+/**
+ * Lit le code équipe depuis l'URL (?equipe=CODE).
+ * @returns {string|null}
+ */
+function getEquipeCodeFromURL() {
+  return new URLSearchParams(location.search).get('equipe') || null;
+}
+
+/**
+ * Initialise le mode équipe PocketBase si ?equipe=CODE est présent dans l'URL.
+ * @returns {Promise<boolean>} true si le mode équipe est activé
+ */
+async function initEquipeMode() {
+  const code = getEquipeCodeFromURL();
+  if (!code) return false;
+
+  const ok = await initFromPocketBase(code);
+  if (!ok) {
+    toastError(`Équipe "${code}" introuvable. Vérifiez le lien ou créez l'équipe.`);
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -76,11 +100,11 @@ async function initShareMode() {
   const data = await loadSharedTemplate(token);
   if (!data) {
     clearShareSession();
-    toastError('Ce lien de partage est invalide ou a été révoqué.');
+    showShareLinkError();
     return false;
   }
 
-  // Creer les membres avec les donnees du template partage
+  // Créer les membres avec les données du template partagé
   const { createMember } = await import('./models/data.js');
   const members = data.members.map(m => createMember({
     name: m.name,
@@ -90,10 +114,10 @@ async function initShareMode() {
     skills: m.skills,
   }));
 
-  // Configurer le state en mode partage
+  // Configurer le state en mode partagé
   updateState({
     members,
-    categories: data.categories || {},
+    categories: applyOrderedCategories(data.categories || {}, data.categoryOrder),
     shareMode: true,
     shareToken: token,
     shareMemberName: null,
@@ -106,8 +130,35 @@ async function initShareMode() {
     autoSaveTemplate: false,
   });
 
-  console.log('[App] Mode partage activé :', data.title);
   return true;
+}
+
+/**
+ * Remplace toute l'interface par une page d'erreur conviviale
+ * quand un lien de partage est invalide ou révoqué.
+ */
+function showShareLinkError() {
+  sessionStorage.setItem('shareError', '1');
+  document.body.innerHTML = `
+    <div class="share-error" role="main">
+      <div class="share-error__card">
+        <div class="share-error__emoji" aria-hidden="true">🔒</div>
+        <h1 class="share-error__title">Lien invalide ou révoqué</h1>
+        <p class="share-error__desc">
+          Ce lien de partage n'existe plus ou a été désactivé par le facilitateur.
+        </p>
+        <div class="share-error__hint">
+          <span class="share-error__hint-icon" aria-hidden="true">💬</span>
+          <div class="share-error__hint-text">
+            <strong>Que faire ?</strong>
+            Demandez un nouveau lien à votre facilitateur. Il peut en générer un depuis
+            le panneau de partage de la Skills Matrix.
+          </div>
+        </div>
+        <p class="share-error__footer">Skills Matrix · BastaVerse</p>
+      </div>
+    </div>
+  `;
 }
 
 /**
@@ -115,14 +166,27 @@ async function initShareMode() {
  * Sets up state, renders the initial UI, and subscribes to events.
  */
 async function init() {
+  // Si l'onglet a déjà vu une erreur de lien de partage et que l'URL ne contient
+  // aucun token valide, on bloque l'accès (empêche le contournement par suppression des params)
+  if (sessionStorage.getItem('shareError') && !getShareTokenFromURL() && !getEquipeCodeFromURL()) {
+    showShareLinkError();
+    return;
+  }
+
   // Initialize toast notifications
   initToasts();
+
+  // Palette de recherche (Ctrl+K / Cmd+K)
+  initCommandPalette();
 
   // Initialize state from localStorage
   initState();
 
-  // Detecter le mode partage (?share=TOKEN)
-  const shareMode = await initShareMode();
+  // Détecter le mode équipe PocketBase (?equipe=CODE) — priorité sur le mode partage
+  const equipeMode = await initEquipeMode();
+
+  // Détecter le mode partage (?share=TOKEN) — ignoré si mode équipe actif
+  const shareMode = !equipeMode && await initShareMode();
 
   // Afficher la sidebar (filtree en mode partage)
   const sidebarEl = document.getElementById('app-sidebar');
@@ -141,6 +205,10 @@ async function init() {
   // Subscribe to view change events
   on('view:changed', (viewId) => {
     switchView(viewId);
+    // Rafraîchir depuis le serveur à chaque ouverture des paramètres (données potentiellement obsolètes)
+    if (viewId === 'settings' && !isShareMode()) {
+      reloadActiveTemplate();
+    }
   });
 
   // Re-render current view when state changes
@@ -165,8 +233,8 @@ async function init() {
   const hashView = getViewFromHash();
   const state = getState();
 
-  if (shareMode) {
-    // En mode partage, toujours commencer par la matrice
+  if (equipeMode || shareMode) {
+    // Mode équipe ou partage : toujours commencer par la matrice
     const validHash = hashView && SHARE_ALLOWED_VIEWS.includes(hashView);
     navigateTo(validHash ? hashView : 'matrix');
   } else if (hashView) {
@@ -189,9 +257,8 @@ function switchView(viewId) {
   if (isShareMode() && !SHARE_ALLOWED_VIEWS.includes(viewId)) return;
 
   // Cleanup previous view if needed
-  if (currentView === 'radar') {
-    destroyRadarChart();
-  }
+  if (currentView === 'radar') destroyRadarChart();
+  if (currentView === 'matrix') cleanupMatrixView();
 
   currentView = viewId;
 
