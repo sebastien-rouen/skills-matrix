@@ -4,12 +4,12 @@
  * Migration : Initialisation Skills Matrix
  *
  * Collections créées (ordre important pour les relations) :
- * 1. skills_categories     — référentiel global (catégories de compétences)
- * 2. skills_competences    — référentiel global (compétences liées à une catégorie)
- * 3. skills_equipes        — équipes (chaque équipe = une instance de la matrice)
- * 4. skills_membres        — membres d'une équipe
- * 5. skills_equipe_competences — pivot : quelles compétences chaque équipe évalue
- * 6. skills_evaluations    — évaluations atomiques (1 ligne = 1 membre × 1 compétence)
+ * 1. skills_categories     - référentiel global (catégories de compétences)
+ * 2. skills_competences    - référentiel global (compétences liées à une catégorie)
+ * 3. skills_equipes        - équipes (chaque équipe = une instance de la matrice)
+ * 4. skills_membres        - membres d'une équipe
+ * 5. skills_equipe_competences - pivot : quelles compétences chaque équipe évalue
+ * 6. skills_evaluations    - évaluations atomiques (1 ligne = 1 membre × 1 compétence)
  *
  * Règles d'accès : toutes ouvertes ("") → le code équipe dans l'URL fait office de clé
  */
@@ -17,7 +17,7 @@
 migrate((app) => {
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 1. skills_categories — référentiel global
+    // 1. skills_categories - référentiel global
     // ─────────────────────────────────────────────────────────────────────────
 
     const categories = new Collection({
@@ -43,7 +43,7 @@ migrate((app) => {
     app.save(categories);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 2. skills_competences — référentiel global
+    // 2. skills_competences - référentiel global
     // ─────────────────────────────────────────────────────────────────────────
 
     const competences = new Collection({
@@ -69,7 +69,7 @@ migrate((app) => {
     app.save(competences);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 3. skills_equipes — équipes
+    // 3. skills_equipes - équipes
     // ─────────────────────────────────────────────────────────────────────────
 
     const equipes = new Collection({
@@ -93,7 +93,7 @@ migrate((app) => {
     app.save(equipes);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 4. skills_membres — membres d'une équipe
+    // 4. skills_membres - membres d'une équipe
     // ─────────────────────────────────────────────────────────────────────────
 
     const membres = new Collection({
@@ -120,7 +120,7 @@ migrate((app) => {
     app.save(membres);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 5. skills_equipe_competences — pivot équipe × compétence
+    // 5. skills_equipe_competences - pivot équipe × compétence
     // ─────────────────────────────────────────────────────────────────────────
 
     const equipeComps = new Collection({
@@ -144,7 +144,7 @@ migrate((app) => {
     app.save(equipeComps);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 6. skills_evaluations — évaluations atomiques
+    // 6. skills_evaluations - évaluations atomiques
     // 1 ligne = 1 membre × 1 compétence → pas de race condition possible
     // ─────────────────────────────────────────────────────────────────────────
 

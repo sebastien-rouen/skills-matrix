@@ -14,12 +14,16 @@
   <!-- Chart.js (for Radar charts) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 
+  <!-- xlsx-js-style (SheetJS fork with cell style support) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
   <!-- Application Styles -->
   <link rel="stylesheet" href="css/variables.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/components.css" />
   <link rel="stylesheet" href="css/matrix.css" />
   <link rel="stylesheet" href="css/charts.css" />
+  <link rel="stylesheet" href="css/my-profile.css" />
 
   <!-- Favicon (inline SVG) -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
@@ -59,6 +63,9 @@
 
         <!-- Settings View -->
         <section class="view" id="view-settings"></section>
+
+        <!-- My Profile View (share mode only) -->
+        <section class="view" id="view-my-profile"></section>
       </div>
     </main>
   </div>

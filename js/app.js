@@ -12,6 +12,7 @@ import { renderDashboardView } from './views/dashboard.js';
 import { renderRadarView, destroyRadarChart } from './views/radar.js';
 import { renderImportView } from './views/import.js';
 import { renderSettingsView } from './views/settings.js';
+import { renderMyProfileView } from './views/my-profile.js';
 import { loadCustomTemplate, applyOrderedCategories } from './services/templates.js';
 import { getShareTokenFromURL, loadSharedTemplate, clearShareSession } from './services/share.js';
 import { showMemberSelectModal, initShareAutoSave } from './components/share-bar.js';
@@ -24,10 +25,11 @@ const VIEW_RENDERERS = {
   radar: renderRadarView,
   import: renderImportView,
   settings: renderSettingsView,
+  'my-profile': renderMyProfileView,
 };
 
 /** @type {string[]} Vues accessibles en mode partage */
-const SHARE_ALLOWED_VIEWS = ['matrix', 'dashboard', 'radar', 'settings'];
+const SHARE_ALLOWED_VIEWS = ['matrix', 'dashboard', 'radar', 'settings', 'my-profile'];
 
 /** @type {string} Currently active view */
 let currentView = 'matrix';
@@ -57,6 +59,7 @@ async function reloadActiveTemplate() {
     if (data) {
       replaceMembers(data.members);
       updateCategories(data.categories);
+      if (data.objectives) updateState({ objectives: data.objectives });
     }
   } finally {
     setAutoSavePaused(false);
@@ -182,10 +185,10 @@ async function init() {
   // Initialize state from localStorage
   initState();
 
-  // Détecter le mode équipe PocketBase (?equipe=CODE) — priorité sur le mode partage
+  // Détecter le mode équipe PocketBase (?equipe=CODE) - priorité sur le mode partage
   const equipeMode = await initEquipeMode();
 
-  // Détecter le mode partage (?share=TOKEN) — ignoré si mode équipe actif
+  // Détecter le mode partage (?share=TOKEN) - ignoré si mode équipe actif
   const shareMode = !equipeMode && await initShareMode();
 
   // Afficher la sidebar (filtree en mode partage)

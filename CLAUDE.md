@@ -29,10 +29,16 @@ js/
 - **Vues** : fonctions de rendu `renderXxxView(container)` - reçoivent un élément DOM et y injectent le contenu
 - **Services** : fonctions pures (pas d'accès DOM), faciles à tester
 - **CSS suit la convention BEM** : `.block__element--modifier`
+- **Filtres dans l'URL** : hash bidirectionnel `#matrix/transposed?cat=X&search=Y&group=G`
+- **Navigation inter-vues** : `buildMatrixHash(layout, filters)` pour les liens dashboard/radar → matrice
+- **Groupes** : stockés sur chaque membre (`member.groups[]`), dérivés via `getAllGroups(members)`, mutés via `renameGroup()` / `removeGroup()`
+- **Épingles** : `togglePinnedSkill()` / `togglePinnedMember()` dans state.js, affichées en haut du dashboard
 
 ## Modèle de données
-- Membres : `{ id, name, role, skills: { [skillName]: { level: 0-4, appetence: 0-3 } } }`
+- Membres : `{ id, name, role, groups: string[], skills: { [skillName]: { level: 0-4, appetence: 0-3, comment?: string } } }`
 - Catégories : `{ [categoryName]: [skillName, ...] }`
+- Objectifs : `{ [skillName]: { minExperts: number } }` — cibles par compétence
+- Épingles : `pinnedSkills: string[]`, `pinnedMembers: string[]` — favoris affichés sur le dashboard
 - Niveaux de compétence : 0=Aucun, 1=Débutant, 2=Intermédiaire, 3=Confirmé, 4=Expert
 - Appétence : 0=Aucune, 1=Faible, 2=Moyen, 3=Fort
 

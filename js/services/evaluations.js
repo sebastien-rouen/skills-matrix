@@ -1,5 +1,5 @@
 /**
- * Service évaluations — écriture atomique, sans race condition.
+ * Service évaluations - écriture atomique, sans race condition.
  *
  * Principe clé : 1 enregistrement PocketBase = 1 membre × 1 compétence.
  * 10 membres qui sauvegardent simultanément → 10 lignes indépendantes → aucun conflit.

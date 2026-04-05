@@ -1,5 +1,5 @@
 /**
- * Service templates — lit et écrit dans la collection `skills_templates` (blob JSON).
+ * Service templates - lit et écrit dans la collection `skills_templates` (blob JSON).
  * Source de vérité unique : PocketBase. Pas de fallback localStorage.
  */
 
@@ -53,7 +53,8 @@ export async function loadCustomTemplate(id) {
             })
         );
         const categories = applyOrderedCategories(raw.categories || {}, raw.categoryOrder);
-        return { members, categories };
+        const objectives = raw.objectives || {};
+        return { members, categories, objectives };
     } catch {
         return null;
     }
@@ -94,10 +95,12 @@ export async function saveCustomTemplate(template) {
 export async function updateCustomTemplate(id, data) {
     try {
         const categoryOrder = Object.keys(data.categories || {});
+        const payload = { members: data.members, categories: data.categories, categoryOrder };
+        if (data.objectives !== undefined) payload.objectives = data.objectives;
         const res = await fetch(`/api/templates/${encodeURIComponent(id)}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ members: data.members, categories: data.categories, categoryOrder }),
+            body: JSON.stringify(payload),
         });
         return res.ok;
     } catch {

@@ -1,4 +1,4 @@
-# PM2 — Guide rapide
+# PM2 - Guide rapide
 
 PM2 gère deux processus pour Skills Matrix :
 

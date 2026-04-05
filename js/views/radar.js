@@ -5,12 +5,13 @@
  */
 
 import { getState } from '../state.js';
-import { getAllSkillNames, isSkillCritical, getSkillStats } from '../models/data.js';
-import { toastWarning } from '../components/toast.js';
+import { getCategorizedSkillNames, isSkillCritical, getSkillStats, getAllGroups } from '../models/data.js';
+import { toastWarning, toastSuccess } from '../components/toast.js';
 import {
   getInitials, escapeHtml, getSkillLabel, getAppetenceIcon, average,
   SKILL_LEVELS, APPETENCE_LEVELS, MEMBER_COLORS,
 } from '../utils/helpers.js';
+import { buildMatrixHash } from './matrix.js';
 
 /** Max number of simultaneously selected members */
 const MAX_SELECTED = 5;
@@ -29,6 +30,12 @@ let showTeamAverage = false;
 
 /** @type {string} Category filter - empty means all */
 let categoryFilter = '';
+
+/** @type {string} Group filter - empty means all */
+let groupFilter = '';
+
+/** @type {boolean} Whether to show objectives overlay on the radar */
+let showObjectives = true;
 
 /** @type {{ key: string|null, ascending: boolean }} Compare table sort state */
 let compareSort = { key: null, ascending: true };
@@ -63,7 +70,7 @@ export function renderRadarView(container) {
     }
   }
 
-  const allSkills = getAllSkillNames(state.members);
+  const allSkills = getCategorizedSkillNames(state.members, state.categories);
   const categories = state.categories || {};
   const threshold = state.settings?.criticalThreshold ?? 2;
 
@@ -92,8 +99,18 @@ export function renderRadarView(container) {
     .map(id => state.members.find(m => m.id === id))
     .filter(Boolean);
 
-  // Category options
+  // Category & group options
   const catNames = Object.keys(categories).filter(c => categories[c].length > 0);
+  const groups = getAllGroups(state.members);
+
+  // Filter chips by group
+  const visibleMembers = groupFilter
+    ? state.members.filter(m => (m.groups || []).includes(groupFilter))
+    : state.members;
+
+  // Objectives data for the radar
+  const objectives = state.objectives || {};
+  const hasObjectives = radarSkills.some(s => objectives[s]?.minExperts);
 
   container.innerHTML = `
     <div class="page-header">
@@ -101,9 +118,12 @@ export function renderRadarView(container) {
         <h1 class="page-header__title">Profil Radar</h1>
         <p class="page-header__subtitle">Visualisation multi-profils et analyse des compétences</p>
       </div>
+      <div class="page-header__actions">
+        <button class="btn btn--secondary btn--sm" id="radar-export-png">📷 Export PNG</button>
+      </div>
     </div>
 
-    <!-- Controls: category + team average -->
+    <!-- Controls: category + group + toggles -->
     <div class="radar-controls" style="margin-bottom: var(--space-3);">
       ${catNames.length > 0 ? `
         <span class="radar-controls__label">Catégorie :</span>
@@ -115,24 +135,43 @@ export function renderRadarView(container) {
         </select>
       ` : ''}
 
-      <label style="display: inline-flex; align-items: center; gap: var(--space-2); margin-left: var(--space-4); cursor: pointer;">
+      ${groups.length > 0 ? `
+        <span class="radar-controls__label" style="margin-left: var(--space-3);">Groupe :</span>
+        <select class="form-select" id="radar-group-filter" style="max-width: 180px;">
+          <option value="">Tous</option>
+          ${groups.map(g => `
+            <option value="${escapeHtml(g)}" ${groupFilter === g ? 'selected' : ''}>${escapeHtml(g)}</option>
+          `).join('')}
+        </select>
+      ` : ''}
+
+      <label class="radar-controls__toggle">
         <input type="checkbox" id="radar-team-avg" ${showTeamAverage ? 'checked' : ''}>
-        <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Moyenne équipe</span>
+        <span>Moyenne équipe</span>
       </label>
+
+      ${hasObjectives ? `
+        <label class="radar-controls__toggle">
+          <input type="checkbox" id="radar-objectives" ${showObjectives ? 'checked' : ''}>
+          <span>Objectifs</span>
+        </label>
+      ` : ''}
     </div>
 
     <!-- Chips: member multi-select -->
     <div class="radar-chips" id="radar-chips">
-      ${state.members.map((m, _i) => {
+      ${visibleMembers.map((m, _i) => {
         const selIndex = selectedMemberIds.indexOf(m.id);
         const isSelected = selIndex !== -1;
         const color = isSelected ? MEMBER_COLORS[selIndex % MEMBER_COLORS.length] : null;
+        const firstGroup = (m.groups && m.groups.length > 0) ? m.groups[0] : '';
         return `
           <div class="radar-chip ${isSelected ? 'radar-chip--active' : ''}"
                data-member-id="${m.id}"
                ${color ? `style="border-color: ${color.point}; background: ${color.point};"` : ''}>
             ${isSelected ? `<span class="radar-chip__dot"></span>` : ''}
             ${escapeHtml(m.name)}
+            ${firstGroup ? `<span class="radar-chip__group">${escapeHtml(firstGroup)}</span>` : ''}
           </div>
         `;
       }).join('')}
@@ -161,6 +200,12 @@ export function renderRadarView(container) {
               Moyenne équipe
             </div>
           ` : ''}
+          ${showObjectives && hasObjectives ? `
+            <div class="radar-legend__item">
+              <span class="radar-legend__color" style="background: transparent; border: 2px dashed #F59E0B;"></span>
+              Objectif équipe
+            </div>
+          ` : ''}
           <div class="radar-legend__critical">⚠ = Compétence critique</div>
         </div>
       </div>
@@ -176,7 +221,7 @@ export function renderRadarView(container) {
   `;
 
   bindRadarEvents(container, state);
-  drawRadarChart(selectedMembers, state.members, radarSkills, showTeamAverage, criticalSet);
+  drawRadarChart(selectedMembers, state.members, radarSkills, showTeamAverage, criticalSet, showObjectives ? objectives : {});
 }
 
 /**
@@ -190,6 +235,7 @@ function renderSingleProfile(member, radarSkills, criticalSet) {
   const skills = Object.entries(member.skills).sort((a, b) => b[1].level - a[1].level);
   const expertCount = skills.filter(([, e]) => e.level === 4).length;
   const confirmedCount = skills.filter(([, e]) => e.level === 3).length;
+  const motivatedCount = skills.filter(([, e]) => e.appetence >= 2).length;
   const avgLevel = skills.length > 0
     ? (skills.reduce((sum, [, e]) => sum + e.level, 0) / skills.length).toFixed(1)
     : '0';
@@ -205,30 +251,26 @@ function renderSingleProfile(member, radarSkills, criticalSet) {
       </div>
     </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-bottom: var(--space-6);">
-      <div style="text-align: center; padding: var(--space-3); background: var(--color-bg-secondary); border-radius: var(--radius-lg);">
-        <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #6EE7B7;">
-          ${expertCount}
-        </div>
-        <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">Expert</div>
+    <div class="radar-profile-stats">
+      <div class="radar-profile-stat">
+        <div class="radar-profile-stat__value" style="color: #6EE7B7;">${expertCount}</div>
+        <div class="radar-profile-stat__label">Expert</div>
       </div>
-      <div style="text-align: center; padding: var(--space-3); background: var(--color-bg-secondary); border-radius: var(--radius-lg);">
-        <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #93C5FD;">
-          ${confirmedCount}
-        </div>
-        <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">Confirmé</div>
+      <div class="radar-profile-stat">
+        <div class="radar-profile-stat__value" style="color: #93C5FD;">${confirmedCount}</div>
+        <div class="radar-profile-stat__label">Confirmé</div>
       </div>
-      <div style="text-align: center; padding: var(--space-3); background: var(--color-bg-secondary); border-radius: var(--radius-lg);">
-        <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-700);">
-          ${avgLevel}
-        </div>
-        <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">Score moyen</div>
+      <div class="radar-profile-stat">
+        <div class="radar-profile-stat__value" style="color: #C4B5FD;">${motivatedCount}</div>
+        <div class="radar-profile-stat__label">Motivé</div>
       </div>
-      <div style="text-align: center; padding: var(--space-3); background: var(--color-bg-secondary); border-radius: var(--radius-lg);">
-        <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: ${criticalCovered === totalCritical ? '#6EE7B7' : '#FCA5A5'};">
-          ${criticalCovered}/${totalCritical}
-        </div>
-        <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">Critiques couvertes</div>
+      <div class="radar-profile-stat">
+        <div class="radar-profile-stat__value" style="color: var(--color-primary-400);">${avgLevel}</div>
+        <div class="radar-profile-stat__label">Score moyen</div>
+      </div>
+      <div class="radar-profile-stat">
+        <div class="radar-profile-stat__value" style="color: ${criticalCovered === totalCritical ? '#6EE7B7' : '#FCA5A5'};">${criticalCovered}/${totalCritical}</div>
+        <div class="radar-profile-stat__label">Critiques</div>
       </div>
     </div>
 
@@ -237,13 +279,8 @@ function renderSingleProfile(member, radarSkills, criticalSet) {
         const isCritical = criticalSet.has(name);
         return `
           <div class="member-skill-row">
-            <span class="member-skill-row__name">
-              ${escapeHtml(name)}
-              ${isCritical
-                ? '<span class="badge badge--critical">Critique</span>'
-                : '<span class="badge badge--success">OK</span>'
-              }
-            </span>
+            <span class="member-skill-row__status ${isCritical ? 'member-skill-row__status--critical' : 'member-skill-row__status--ok'}" title="${isCritical ? 'Critique' : 'OK'}"></span>
+            <a class="member-skill-row__name action-card__link" href="${buildMatrixHash('default', { search: name })}">${escapeHtml(name)}</a>
             <div class="member-skill-row__level">
               ${[1, 2, 3, 4].map(i => `
                 <div class="member-skill-row__dot ${i <= entry.level ? 'member-skill-row__dot--filled' : ''}"
@@ -439,14 +476,16 @@ function renderCompareTable(members, radarSkills, criticalSet) {
             const isCritical = criticalSet.has(skill);
             return `
               <tr>
-                <td>${escapeHtml(skill)}</td>
+                <td><a class="action-card__link" href="${buildMatrixHash('default', { search: skill })}">${escapeHtml(skill)}</a></td>
                 ${members.map(m => {
                   const level = m.skills[skill]?.level ?? 0;
+                  const appetence = m.skills[skill]?.appetence ?? 0;
                   const bg = SKILL_LEVELS[level]?.color || '#E2E8F0';
                   const textColor = SKILL_LEVELS[level]?.textColor || '#64748B';
+                  const appIcon = getAppetenceIcon(appetence);
                   return `<td>
-                    <span class="radar-compare-table__level" style="background: ${bg}; color: ${textColor};" title="${getSkillLabel(level)}">
-                      ${level}
+                    <span class="radar-compare-table__level" style="background: ${bg}; color: ${textColor};" title="${getSkillLabel(level)}${appetence > 0 ? ' · Appétence : ' + APPETENCE_LEVELS[appetence]?.label : ''}">
+                      ${level}${appIcon ? `<span class="radar-compare-table__appetence">${appIcon}</span>` : ''}
                     </span>
                   </td>`;
                 }).join('')}
@@ -472,8 +511,9 @@ function renderCompareTable(members, radarSkills, criticalSet) {
  * @param {string[]} skills - Skills to display on the radar
  * @param {boolean} showAvg - Whether to show team average
  * @param {Set<string>} criticalSet - Critical skill names
+ * @param {Object} [objectives={}] - Objectives map { skillName: { minExperts } }
  */
-function drawRadarChart(selectedMembers, allMembers, skills, showAvg, criticalSet) {
+function drawRadarChart(selectedMembers, allMembers, skills, showAvg, criticalSet, objectives = {}) {
   const canvas = document.getElementById('radar-canvas');
   if (!canvas) return;
 
@@ -520,6 +560,30 @@ function drawRadarChart(selectedMembers, allMembers, skills, showAvg, criticalSe
       borderDash: [6, 4],
       pointBackgroundColor: '#94A3B8',
       pointRadius: 3,
+    });
+  }
+
+  // Optional objectives overlay
+  const hasObjData = skills.some(s => objectives[s]?.minExperts);
+  if (hasObjData) {
+    // Translate minExperts into a radar level: we show the target as a level (capped at 4)
+    // Logic: minExperts is "how many people at level 3+", so we display the target level itself (e.g. 3 = Confirmé)
+    datasets.push({
+      label: 'Objectif équipe',
+      data: skills.map(s => {
+        const obj = objectives[s];
+        if (!obj?.minExperts) return 0;
+        // Show as level 3 (Confirmé) — the minimum expected proficiency
+        return 3;
+      }),
+      backgroundColor: 'rgba(245, 158, 11, 0.04)',
+      borderColor: 'rgba(245, 158, 11, 0.5)',
+      borderWidth: 2,
+      borderDash: [4, 4],
+      pointBackgroundColor: 'rgba(245, 158, 11, 0.6)',
+      pointRadius: 2,
+      pointStyle: 'dash',
+      fill: false,
     });
   }
 
@@ -599,11 +663,36 @@ function bindRadarEvents(container, state) {
     renderRadarView(container);
   });
 
+  // Group filter
+  const groupSelect = container.querySelector('#radar-group-filter');
+  groupSelect?.addEventListener('change', (e) => {
+    groupFilter = e.target.value;
+    renderRadarView(container);
+  });
+
   // Team average toggle
   const avgCheckbox = container.querySelector('#radar-team-avg');
   avgCheckbox?.addEventListener('change', (e) => {
     showTeamAverage = e.target.checked;
     renderRadarView(container);
+  });
+
+  // Objectives toggle
+  const objCheckbox = container.querySelector('#radar-objectives');
+  objCheckbox?.addEventListener('change', (e) => {
+    showObjectives = e.target.checked;
+    renderRadarView(container);
+  });
+
+  // Export PNG
+  container.querySelector('#radar-export-png')?.addEventListener('click', () => {
+    const canvas = document.getElementById('radar-canvas');
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = 'profil-radar.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    toastSuccess('Image exportée.');
   });
 
   // Compare table sort headers

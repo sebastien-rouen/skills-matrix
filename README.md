@@ -1,4 +1,4 @@
-# 📊 Skills Matrix `v2.0.0`
+# 📊 Skills Matrix `v2.1.0`
 
 > Visualisez les competences de votre equipe en un coup d'oeil.
 > Identifiez les lacunes critiques.
@@ -87,18 +87,20 @@ L'app detecte automatiquement la presence de PocketBase. Si PocketBase n'est pas
 
 | Vue | Description |
 |-----|-------------|
-| 🗂️ **Matrice** | Tableau heatmap membres x competences, edition inline, tri multi-colonnes, badges d'appetence |
-| 📈 **Dashboard** | KPIs de couverture, alertes competences critiques, priorites de formation, mentorat |
+| 🗂️ **Matrice** | Tableau heatmap membres x competences, edition inline, commentaires, mode compact, tri multi-colonnes, badges d'appetence |
+| 📈 **Dashboard** | KPIs de couverture, alertes bus factor, heatmap appetence, comparaison inter-groupes, priorites de formation |
 | 🕸️ **Radar** | Graphique radar par membre, comparaison multi-profils (jusqu'a 5), overlay moyenne equipe |
 | 📥 **Import** | Collage depuis Excel/Sheets, upload CSV, demos en 1 clic, templates personnalises |
-| ⚙️ **Parametres** | Seuils de criticite, gestion des categories, delimiteur CSV, export/import JSON complet |
+| ⚙️ **Parametres** | Seuils de criticite, gestion des categories et groupes, affectation en masse, export/import JSON complet |
 
 **Transversal :**
-- 🔎 Filtres avances (recherche, categorie, role, niveau, criticite)
+- 🔎 Filtres avances (recherche, categorie, role, groupe, niveau, criticite)
+- 📌 Epingles : epingler competences ou membres surveilles en haut du dashboard
+- 📂 Gestion des groupes : referentiel, affectation en masse, onglets dans la matrice, import coller
 - 💾 Sauvegarde automatique en `localStorage` a chaque modification
-- 📤 Export CSV simple, CSV detaille et JSON (backup complet)
+- 📤 Export CSV simple, CSV detaille, JSON et Excel (backup complet)
 - 🏷️ Categories de competences avec auto-categorisation
-- 🔗 URLs partageables (`#dashboard`, `#matrix`, `#radar`, `#import`, `#settings`)
+- 🔗 URLs partageables avec filtres persistes (`#matrix?cat=Frontend&search=js`)
 
 ---
 

@@ -85,6 +85,25 @@ export function getAllSkillNames(members) {
 }
 
 /**
+ * Get skill names that are assigned to at least one category.
+ * Uncategorized skills are excluded (they only appear in settings).
+ * Falls back to all skills if no categories are defined.
+ * @param {Object[]} members - Array of member objects
+ * @param {Object} categories - Categories map { catName: [skillName, ...] }
+ * @returns {string[]} Sorted list of categorized skill names
+ */
+export function getCategorizedSkillNames(members, categories) {
+  if (!categories || Object.keys(categories).length === 0) {
+    return getAllSkillNames(members);
+  }
+  const categorized = new Set();
+  for (const skills of Object.values(categories)) {
+    for (const s of skills) categorized.add(s);
+  }
+  return getAllSkillNames(members).filter(s => categorized.has(s));
+}
+
+/**
  * Get all unique roles across all members.
  * @param {Object[]} members - Array of member objects
  * @returns {string[]} Sorted list of unique roles
@@ -110,6 +129,24 @@ export function getAllGroups(members) {
     }
   }
   return [...groups].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+/**
+ * Get all unique appetence values across all members (split on comma).
+ * @param {Object[]} members - Array of member objects
+ * @returns {string[]} Sorted list of unique appetence values
+ */
+export function getAllAppetences(members) {
+  const values = new Set();
+  for (const m of members) {
+    if (m.appetences) {
+      for (const a of m.appetences.split(',')) {
+        const trimmed = a.trim();
+        if (trimmed) values.add(trimmed);
+      }
+    }
+  }
+  return [...values].sort((a, b) => a.localeCompare(b, 'fr'));
 }
 
 /**
@@ -211,6 +248,8 @@ export function createDefaultState() {
       csvDelimiter: ';',
     },
     objectives: {},
+    pinnedSkills: [],
+    pinnedMembers: [],
     activeTemplate: null,
     autoSaveTemplate: true,
     shareMode: false,

@@ -2,7 +2,7 @@
  * Serveur Skills Matrix.
  * - Sert les fichiers statiques
  * - Proxy transparent /pb/* → PocketBase (évite les problèmes CORS pour la communauté)
- * - Routes /api/share* — gestion des liens de partage (tokens → shares.json)
+ * - Routes /api/share* - gestion des liens de partage (tokens → shares.json)
  *
  * Pour BastaVerse : Nginx gère déjà le proxy /pb, ce serveur sert uniquement les statics + l'API share.
  * Pour la communauté : ce serveur fait tout (statics + proxy PB + share API).
@@ -99,7 +99,7 @@ app.use(express.json());
 
 // ── API Catégories ────────────────────────────────────────────────────────────
 
-// PATCH /api/categories/order — met à jour skills_categories.ordre selon l'ordre fourni
+// PATCH /api/categories/order - met à jour skills_categories.ordre selon l'ordre fourni
 // Nécessite PB_TOKEN car skills_categories.updateRule = null (admin only)
 app.patch('/api/categories/order', async (req, res) => {
     const { order } = req.body || {};
@@ -124,11 +124,11 @@ app.patch('/api/categories/order', async (req, res) => {
 
 // ── API Templates ─────────────────────────────────────────────────────────────
 
-// PATCH /api/templates/:slug — mettre à jour members+categories d'un template
+// PATCH /api/templates/:slug - mettre à jour members+categories d'un template
 // Passe par le serveur pour bénéficier du PB_TOKEN (les règles PB bloquent les writes anonymes)
 app.patch('/api/templates/:slug', express.json(), async (req, res) => {
     const { slug } = req.params;
-    const { members, categories, categoryOrder } = req.body || {};
+    const { members, categories, categoryOrder, objectives } = req.body || {};
 
     try {
         const filter = encodeURIComponent(`slug="${slug}"`);
@@ -139,7 +139,7 @@ app.patch('/api/templates/:slug', express.json(), async (req, res) => {
         const existing = tpl.data || {};
         const patch = await pbRequest(`/api/collections/skills_templates/records/${tpl.id}`, {
             method: 'PATCH',
-            body: { data: { ...existing, members: members ?? existing.members, categories: categories ?? existing.categories, categoryOrder: categoryOrder ?? existing.categoryOrder ?? [] } },
+            body: { data: { ...existing, members: members ?? existing.members, categories: categories ?? existing.categories, categoryOrder: categoryOrder ?? existing.categoryOrder ?? [], objectives: objectives ?? existing.objectives ?? {} } },
         });
         if (patch.status >= 400) {
             console.error('[Templates] PB PATCH refusé :', patch.status, JSON.stringify(patch.body));
@@ -155,7 +155,7 @@ app.patch('/api/templates/:slug', express.json(), async (req, res) => {
 
 app.use(express.json());
 
-// POST /api/share — créer un lien de partage
+// POST /api/share - créer un lien de partage
 app.post('/api/share', (req, res) => {
     const { templateId } = req.body || {};
     if (!templateId) return res.status(400).json({ error: 'templateId requis' });
@@ -167,7 +167,7 @@ app.post('/api/share', (req, res) => {
     res.json({ success: true, token });
 });
 
-// GET /api/shares/:templateId — lister les tokens actifs pour un template
+// GET /api/shares/:templateId - lister les tokens actifs pour un template
 app.get('/api/shares/:templateId', (req, res) => {
     const shares = readShares();
     const result = Object.entries(shares)
@@ -176,7 +176,7 @@ app.get('/api/shares/:templateId', (req, res) => {
     res.json(result);
 });
 
-// GET /api/share/:token — charger le template partagé
+// GET /api/share/:token - charger le template partagé
 app.get('/api/share/:token', async (req, res) => {
     const shares = readShares();
     const share = shares[req.params.token];
@@ -211,7 +211,7 @@ app.get('/api/share/:token', async (req, res) => {
     }
 });
 
-// PUT /api/share/:token/skills — mettre à jour les compétences d'un membre
+// PUT /api/share/:token/skills - mettre à jour les compétences d'un membre
 app.put('/api/share/:token/skills', async (req, res) => {
     const shares = readShares();
     const share = shares[req.params.token];
@@ -231,19 +231,22 @@ app.put('/api/share/:token/skills', async (req, res) => {
         const memberIdx = members.findIndex(m => m.name === memberName);
         if (memberIdx === -1) return res.status(404).json({ error: 'Membre introuvable' });
 
-        members[memberIdx] = { ...members[memberIdx], skills };
+        members[memberIdx].skills = { ...members[memberIdx].skills, ...skills };
 
-        await pbRequest(`/api/collections/skills_templates/records/${tpl.id}`, {
+        const pbRes = await pbRequest(`/api/collections/skills_templates/records/${tpl.id}`, {
             method: 'PATCH',
             body: { data: { ...raw, members } },
         });
+        if (pbRes.status >= 400) {
+            return res.status(502).json({ error: 'PocketBase a refusé la sauvegarde' });
+        }
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Erreur serveur' });
     }
 });
 
-// PUT /api/share/:token/categories — mettre à jour les catégories via lien de partage
+// PUT /api/share/:token/categories - mettre à jour les catégories via lien de partage
 app.put('/api/share/:token/categories', async (req, res) => {
     const shares = readShares();
     const share = shares[req.params.token];
@@ -263,17 +266,20 @@ app.put('/api/share/:token/categories', async (req, res) => {
         const raw = tpl.data || {};
         const patch = { ...raw, categories };
         if (Array.isArray(members)) patch.members = members;
-        await pbRequest(`/api/collections/skills_templates/records/${tpl.id}`, {
+        const pbRes = await pbRequest(`/api/collections/skills_templates/records/${tpl.id}`, {
             method: 'PATCH',
             body: { data: patch },
         });
+        if (pbRes.status >= 400) {
+            return res.status(502).json({ error: 'PocketBase a refusé la sauvegarde' });
+        }
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Erreur serveur' });
     }
 });
 
-// DELETE /api/share/:token — révoquer un lien de partage
+// DELETE /api/share/:token - révoquer un lien de partage
 app.delete('/api/share/:token', (req, res) => {
     const shares = readShares();
     if (!shares[req.params.token]) return res.status(404).json({ error: 'Token introuvable' });

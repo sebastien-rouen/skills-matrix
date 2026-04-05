@@ -4,9 +4,10 @@
  * multiple API sources, display settings, and backup/restore.
  */
 
-import { getState, updateState, updateCategories, updateSettings, updateMember, removeMember, replaceMembers, addMembers, removeSkill, isEquipeMode, isShareMode } from '../state.js';
-import { getAllSkillNames, getAllGroups, getAllRoles, createMember } from '../models/data.js';
-import { exportJSON, parseJSON } from '../services/exporter.js';
+import { getState, updateState, updateCategories, updateSettings, updateMember, removeMember, replaceMembers, addMembers, removeSkill, renameGroup, removeGroup, isEquipeMode, isShareMode } from '../state.js';
+import { getAllSkillNames, getCategorizedSkillNames, getAllGroups, getAllRoles, getAllAppetences, createMember, getSkillStats } from '../models/data.js';
+import { exportJSON, parseJSON, exportMarkdown } from '../services/exporter.js';
+import { exportXLSX } from '../services/exporter-xlsx.js';
 import {
   loadApiSources, addApiSource, removeApiSource,
   testConnection, convertApiDataToMembers, convertApiDataToSkills,
@@ -23,6 +24,20 @@ import { downloadFile, escapeHtml, debounce, generateId } from '../utils/helpers
 // ============================================================
 
 /**
+ * Persiste les objectifs dans PocketBase si on est en mode equipe.
+ * Appel fire-and-forget apres chaque modification d'objectif.
+ * @param {Object} objectives - Map { skillName: { minExperts: number } }
+ */
+function syncObjectivesToPb(objectives) {
+  const state = getState();
+  if (!isEquipeMode() || !state.equipeId) return;
+  import('../services/equipes.js').then(({ updateObjectives }) => {
+    updateObjectives(state.equipeId, objectives)
+      .catch(err => console.warn('[Settings] Sync objectifs PB echoue :', err));
+  });
+}
+
+/**
  * Save the active template to the server immediately.
  * In share mode, saves only categories via the share token.
  * Prevents stale server data from overwriting local changes on reload.
@@ -37,6 +52,88 @@ function saveActiveTemplate() {
   updateCustomTemplate(current.activeTemplate.id, {
     members: current.members,
     categories: current.categories || {},
+    objectives: current.objectives || {},
+  });
+}
+
+/**
+ * Attache un autocomplete multi-valeurs (séparé par virgules) à un input.
+ * Affiche un dropdown filtré sur le dernier segment tapé.
+ * @param {HTMLInputElement} input - Champ texte cible
+ * @param {() => string[]} getSuggestions - Fonction retournant les suggestions
+ */
+function attachAutocomplete(input, getSuggestions) {
+  let dropdown = null;
+  let activeIdx = -1;
+
+  function lastSegment() {
+    const last = input.value.lastIndexOf(',');
+    return (last === -1 ? input.value : input.value.slice(last + 1)).trim();
+  }
+
+  function replaceLastSegment(value) {
+    const last = input.value.lastIndexOf(',');
+    input.value = last === -1 ? value : input.value.slice(0, last + 1) + ' ' + value;
+    close();
+    input.focus();
+  }
+
+  function close() {
+    if (dropdown) { dropdown.remove(); dropdown = null; }
+    activeIdx = -1;
+  }
+
+  function show(matches) {
+    close();
+    if (matches.length === 0) return;
+    dropdown = document.createElement('div');
+    dropdown.className = 'autocomplete-dropdown';
+    const rect = input.getBoundingClientRect();
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.top = (rect.bottom + 2) + 'px';
+    dropdown.style.minWidth = rect.width + 'px';
+    for (const m of matches) {
+      const item = document.createElement('div');
+      item.className = 'autocomplete-dropdown__item';
+      item.textContent = m;
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        replaceLastSegment(m);
+      });
+      dropdown.appendChild(item);
+    }
+    document.body.appendChild(dropdown);
+  }
+
+  function update() {
+    const q = lastSegment().toLowerCase();
+    if (!q) { close(); return; }
+    const existing = new Set(input.value.split(',').map(s => s.trim().toLowerCase()));
+    const matches = getSuggestions()
+      .filter(s => s.toLowerCase().includes(q) && !existing.has(s.toLowerCase()))
+      .slice(0, 8);
+    show(matches);
+  }
+
+  input.addEventListener('input', update);
+  input.addEventListener('blur', () => setTimeout(close, 150));
+  input.addEventListener('keydown', (e) => {
+    if (!dropdown) return;
+    const items = dropdown.querySelectorAll('.autocomplete-dropdown__item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIdx = Math.min(activeIdx + 1, items.length - 1);
+      items.forEach((it, i) => it.classList.toggle('autocomplete-dropdown__item--active', i === activeIdx));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIdx = Math.max(activeIdx - 1, 0);
+      items.forEach((it, i) => it.classList.toggle('autocomplete-dropdown__item--active', i === activeIdx));
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      replaceLastSegment(items[activeIdx].textContent);
+    } else if (e.key === 'Escape') {
+      close();
+    }
   });
 }
 
@@ -52,8 +149,89 @@ async function saveReferentiel() {
   if (ok) {
     toastSuccess('Référentiel sauvegardé.');
   } else {
-    toastError('Erreur lors de la sauvegarde — réessayez.');
+    toastError('Erreur lors de la sauvegarde - réessayez.');
   }
+}
+
+// ============================================================
+// Export preview modal
+// ============================================================
+
+/**
+ * Affiche une modale de previsualisation avant telechargement.
+ * @param {string} formatLabel - Ex: "JSON", "Markdown", "Excel"
+ * @param {string|null} textContent - Contenu texte (null pour XLSX)
+ * @param {string} filename - Nom du fichier a telecharger
+ * @param {string|null} mimeType - MIME type (null si blob fourni)
+ * @param {Blob|null} [blob=null] - Blob pret a telecharger (XLSX)
+ */
+function showExportPreview(formatLabel, textContent, filename, mimeType, blob = null) {
+  const isText = textContent !== null;
+  const truncated = isText && textContent.length > 8000;
+  const preview = isText
+    ? escapeHtml(truncated ? textContent.slice(0, 8000) + '\n\n... (tronqué)' : textContent)
+    : '';
+  const sizeKb = isText
+    ? (new Blob([textContent]).size / 1024).toFixed(1)
+    : (blob.size / 1024).toFixed(1);
+
+  const body = `
+    <div class="export-preview">
+      <div class="export-preview__meta">
+        <span class="export-preview__badge">${escapeHtml(formatLabel)}</span>
+        <span class="export-preview__filename">${escapeHtml(filename)}</span>
+        <span class="export-preview__size">${sizeKb} Ko</span>
+      </div>
+      ${isText ? `
+        <div class="export-preview__content">
+          <pre class="export-preview__pre">${preview}</pre>
+        </div>
+        <button class="btn btn--ghost btn--sm export-preview__copy" data-action="copy">Copier dans le presse-papier</button>
+      ` : `
+        <div class="export-preview__xlsx-info">
+          <p>Fichier Excel avec 5 onglets :</p>
+          <ul>
+            <li><strong>Matrice</strong> - niveaux par membre (avec couleurs)</li>
+            <li><strong>Appétences</strong> - appétences par membre</li>
+            <li><strong>Analyse</strong> - statistiques par compétence</li>
+            <li><strong>Formations</strong> - priorités de formation</li>
+            <li><strong>Objectifs</strong> - objectifs d'équipe</li>
+          </ul>
+        </div>
+      `}
+    </div>
+  `;
+
+  showModal({
+    title: `Export ${formatLabel}`,
+    body,
+    confirmLabel: 'Télécharger',
+    confirmClass: 'btn--primary',
+    onConfirm: () => {
+      if (isText) {
+        downloadFile(textContent, filename, mimeType);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+      toastSuccess(`${formatLabel} exporté : ${filename}`);
+    },
+  });
+
+  // Bind copy button inside modal
+  setTimeout(() => {
+    document.querySelector('.export-preview__copy')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(textContent).then(() => {
+        toastSuccess('Copié dans le presse-papier.');
+      });
+    });
+  }, 50);
 }
 
 // ============================================================
@@ -61,13 +239,14 @@ async function saveReferentiel() {
 // ============================================================
 
 const SECTIONS = [
-  { id: 'settings-categories', label: 'Categories', needsData: true },
-  { id: 'settings-members', label: 'Membres', needsData: true },
-  { id: 'settings-objectives', label: 'Objectifs', needsData: true },
-  { id: 'settings-thresholds', label: 'Seuils', needsData: false },
-  { id: 'settings-export', label: 'Export CSV', needsData: false },
-  { id: 'settings-sources', label: 'Sources API', needsData: false },
-  { id: 'settings-backup', label: 'Sauvegarde', needsData: false },
+  { id: 'settings-categories', label: 'Categories', icon: '🏷️', needsData: true },
+  { id: 'settings-members', label: 'Membres', icon: '👥', needsData: true },
+  { id: 'settings-groups', label: 'Groupes', icon: '📂', needsData: true },
+  { id: 'settings-objectives', label: 'Objectifs', icon: '🎯', needsData: true },
+  { id: 'settings-thresholds', label: 'Seuils', icon: '⚙️', needsData: false },
+  { id: 'settings-export', label: 'Export', icon: '📤', needsData: false },
+  { id: 'settings-sources', label: 'Sources', icon: '🔌', needsData: false },
+  { id: 'settings-backup', label: 'Sauvegarde', icon: '💾', needsData: false },
 ];
 
 // ============================================================
@@ -103,6 +282,8 @@ export function renderSettingsView(container) {
 
     ${hasData ? renderMemberCard(state) : ''}
 
+    ${hasData ? renderGroupsCard(state) : ''}
+
     ${hasData ? renderObjectivesCard(state) : ''}
 
     ${renderThresholdsCard(settings)}
@@ -118,7 +299,7 @@ export function renderSettingsView(container) {
 }
 
 /**
- * Render a simplified view for share mode — only category/skill management.
+ * Render a simplified view for share mode - only category/skill management.
  * @param {HTMLElement} container
  */
 function renderShareReferentielView(container) {
@@ -129,7 +310,7 @@ function renderShareReferentielView(container) {
     <div class="page-header">
       <div>
         <h1 class="page-header__title">Référentiel de compétences</h1>
-        <p class="page-header__subtitle">Modifiez les catégories et compétences — les changements sont sauvegardés pour tous</p>
+        <p class="page-header__subtitle">Modifiez les catégories et compétences - les changements sont sauvegardés pour tous</p>
       </div>
     </div>
 
@@ -155,7 +336,7 @@ function renderShareReferentielView(container) {
 function renderSummary(hasData) {
   const links = SECTIONS
     .filter(s => !s.needsData || hasData)
-    .map(s => `<a class="settings-summary__link" href="#${s.id}" data-target="${s.id}">${s.label}</a>`)
+    .map(s => `<a class="settings-summary__link" href="#${s.id}" data-target="${s.id}"><span class="settings-summary__icon">${s.icon}</span><span class="settings-summary__label">${s.label}</span></a>`)
     .join('');
 
   return `
@@ -213,9 +394,9 @@ function renderCategoryCard(state) {
   }
 
   return `
-    <div class="card" id="settings-categories" style="margin-bottom: var(--space-6);">
+    <div class="card settings-card settings-card--categories" id="settings-categories">
       <div class="card__header">
-        <h3 class="card__title">Gestion des categories</h3>
+        <h3 class="card__title"><span class="card__title-icon">🏷️</span> Gestion des categories</h3>
         <div style="display: flex; gap: var(--space-2);">
           <button class="btn btn--ghost btn--sm" id="settings-copy-slack" title="Copier le référentiel formaté pour Slack">📋 Copier pour Slack</button>
           <button class="btn btn--secondary btn--sm" id="settings-auto-categorize">Auto-categoriser</button>
@@ -260,14 +441,14 @@ function renderMemberCard(state) {
         <div class="settings-member-card__fields">
           <div class="settings-member-card__field">
             <span class="settings-member-card__label">Appétences</span>
-            <span class="member-display" data-field="appetences">${escapeHtml(m.appetences || '—')}</span>
+            <span class="member-display" data-field="appetences">${escapeHtml(m.appetences || '-')}</span>
             <input class="form-input member-edit-input" data-field="appetences" type="text"
                    value="${escapeHtml(m.appetences)}" style="display: none;" />
           </div>
           <div class="settings-member-card__field">
             <span class="settings-member-card__label">Groupes</span>
             <span class="member-display" data-field="groups">
-              ${(m.groups || []).map(g => `<span class="badge badge--neutral" style="margin: 1px;">${escapeHtml(g)}</span>`).join(' ') || '<span style="color: var(--color-text-tertiary);">—</span>'}
+              ${(m.groups || []).map(g => `<span class="badge badge--neutral" style="margin: 1px;">${escapeHtml(g)}</span>`).join(' ') || '<span style="color: var(--color-text-tertiary);">-</span>'}
             </span>
             <input class="form-input member-edit-input" data-field="groups" type="text"
                    value="${escapeHtml(groupsStr)}" placeholder="Groupe1, Groupe2"
@@ -278,21 +459,18 @@ function renderMemberCard(state) {
     `;
   }).join('');
 
-  const groups = getAllGroups(state.members);
   const roles = getAllRoles(state.members);
-  const groupSuggestions = groups.map(g => `<option value="${escapeHtml(g)}">`).join('');
   const roleSuggestions = roles.map(r => `<option value="${escapeHtml(r)}">`).join('');
 
   return `
-    <div class="card" id="settings-members" style="margin-bottom: var(--space-6);">
+    <div class="card settings-card settings-card--members" id="settings-members">
       <div class="card__header">
-        <h3 class="card__title">Gestion des membres</h3>
+        <h3 class="card__title"><span class="card__title-icon">👥</span> Gestion des membres</h3>
         <span class="badge badge--info">${state.members.length} membre(s)</span>
       </div>
       <div class="settings-members-grid">
         ${membersHtml}
       </div>
-      <datalist id="member-groups-suggestions">${groupSuggestions}</datalist>
       <datalist id="member-role-suggestions">${roleSuggestions}</datalist>
       <div class="member-add-form" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border);">
         <p style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); margin-bottom: var(--space-3);">Ajouter un membre</p>
@@ -307,11 +485,135 @@ function renderMemberCard(state) {
           </div>
           <div>
             <label style="font-size: var(--font-size-xs); color: var(--color-text-secondary); display: block; margin-bottom: 4px;">Groupes</label>
-            <input type="text" class="form-input" id="member-add-groups" placeholder="Groupe1, Groupe2" list="member-groups-suggestions" />
+            <input type="text" class="form-input" id="member-add-groups" placeholder="Groupe1, Groupe2" />
           </div>
           <button class="btn btn--primary btn--sm" id="member-add-btn" style="white-space: nowrap;">+ Ajouter</button>
         </div>
       </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the groups management card with referential, rename/delete,
+ * bulk member assignment, and paste-import.
+ * @param {Object} state - Application state
+ * @returns {string} Card HTML
+ */
+function renderGroupsCard(state) {
+  const groups = getAllGroups(state.members);
+  const membersByGroup = {};
+  for (const g of groups) {
+    membersByGroup[g] = state.members.filter(m => (m.groups || []).includes(g));
+  }
+  const ungrouped = state.members.filter(m => !m.groups || m.groups.length === 0);
+
+  const groupRowsHtml = groups.map(g => {
+    const members = membersByGroup[g];
+    const avatars = members.slice(0, 6).map(m =>
+      `<span class="group-row__avatar" title="${escapeHtml(m.name)}">${escapeHtml(m.name.charAt(0))}</span>`
+    ).join('');
+    const extra = members.length > 6 ? `<span class="group-row__avatar group-row__avatar--more">+${members.length - 6}</span>` : '';
+    return `
+      <div class="group-row" data-group="${escapeHtml(g)}">
+        <div class="group-row__info">
+          <span class="group-row__name">${escapeHtml(g)}</span>
+          <span class="group-row__count">${members.length} membre${members.length > 1 ? 's' : ''}</span>
+        </div>
+        <div class="group-row__avatars">${avatars}${extra}</div>
+        <div class="group-row__actions">
+          <button class="btn btn--ghost btn--sm group-rename-btn" data-group="${escapeHtml(g)}" title="Renommer">✏️</button>
+          <button class="btn btn--ghost btn--sm group-delete-btn" data-group="${escapeHtml(g)}" title="Supprimer">🗑</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const ungroupedHtml = ungrouped.length > 0 ? `
+    <div class="group-row group-row--ungrouped">
+      <div class="group-row__info">
+        <span class="group-row__name" style="color: var(--color-text-tertiary); font-style: italic;">Sans groupe</span>
+        <span class="group-row__count">${ungrouped.length} membre${ungrouped.length > 1 ? 's' : ''}</span>
+      </div>
+      <div class="group-row__avatars">
+        ${ungrouped.slice(0, 6).map(m => `<span class="group-row__avatar group-row__avatar--muted" title="${escapeHtml(m.name)}">${escapeHtml(m.name.charAt(0))}</span>`).join('')}
+        ${ungrouped.length > 6 ? `<span class="group-row__avatar group-row__avatar--more">+${ungrouped.length - 6}</span>` : ''}
+      </div>
+      <div class="group-row__actions"></div>
+    </div>
+  ` : '';
+
+  // Bulk assignment : liste de tous les membres avec checkboxes
+  const bulkMembersHtml = state.members.map(m => {
+    const groupBadges = (m.groups || []).map(g =>
+      `<span class="badge badge--neutral" style="font-size: 10px;">${escapeHtml(g)}</span>`
+    ).join(' ');
+    return `
+      <label class="bulk-member-row">
+        <input type="checkbox" class="bulk-member-check" data-member-id="${m.id}" />
+        <span class="bulk-member-row__name">${escapeHtml(m.name)}</span>
+        <span class="bulk-member-row__groups">${groupBadges || '<span style="color: var(--color-text-tertiary); font-size: 10px;">-</span>'}</span>
+      </label>
+    `;
+  }).join('');
+
+  const groupOptions = groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+
+  return `
+    <div class="card settings-card settings-card--groups" id="settings-groups">
+      <div class="card__header">
+        <h3 class="card__title"><span class="card__title-icon">📂</span> Gestion des groupes</h3>
+        <span class="badge badge--info">${groups.length} groupe${groups.length > 1 ? 's' : ''}</span>
+      </div>
+
+      <div class="groups-list" id="groups-list">
+        ${groupRowsHtml || '<p class="settings-card__empty">Aucun groupe defini.</p>'}
+        ${ungroupedHtml}
+      </div>
+
+      <div class="group-add-form">
+        <input type="text" class="form-input" id="group-add-name" placeholder="Nouveau groupe..." style="flex: 1; max-width: 250px;" />
+        <button class="btn btn--secondary btn--sm" id="group-add-btn">+ Ajouter</button>
+      </div>
+
+      <details class="group-bulk-details">
+        <summary class="btn btn--secondary btn--sm" style="cursor: pointer; margin-top: var(--space-3);">Affectation en masse</summary>
+        <div class="group-bulk-panel">
+          <div class="group-bulk-panel__toolbar">
+            <button class="btn btn--ghost btn--sm" id="bulk-select-all">Tout cocher</button>
+            <button class="btn btn--ghost btn--sm" id="bulk-select-none">Tout decocher</button>
+            <span class="bulk-count" id="bulk-count">0 selectionne(s)</span>
+          </div>
+          <div class="group-bulk-panel__list" id="bulk-members-list">
+            ${bulkMembersHtml}
+          </div>
+          <div class="group-bulk-panel__actions">
+            <select class="form-select" id="bulk-group-select">
+              <option value="">Choisir un groupe...</option>
+              ${groupOptions}
+              <option value="__new__">-- Nouveau groupe --</option>
+            </select>
+            <input type="text" class="form-input" id="bulk-new-group-name" placeholder="Nom du nouveau groupe" style="display: none; max-width: 180px;" />
+            <button class="btn btn--primary btn--sm" id="bulk-add-to-group" title="Ajouter la selection au groupe">+ Ajouter au groupe</button>
+            <button class="btn btn--ghost btn--sm" id="bulk-remove-from-group" title="Retirer la selection du groupe" style="color: var(--color-danger-500);">Retirer du groupe</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="group-import-details">
+        <summary class="btn btn--secondary btn--sm" style="cursor: pointer; margin-top: var(--space-2);">Importer via coller</summary>
+        <div class="group-import-panel">
+          <p class="settings-card__description">
+            Collez des donnees au format <strong>Membre ; Groupe</strong> ou <strong>Membre \\t Groupe</strong> (un par ligne).
+          </p>
+          <textarea class="form-input group-import-textarea" id="group-import-textarea" rows="6" placeholder="Alice Dupont ; Squad A&#10;Bob Martin ; Squad B&#10;Charlie ; Squad A, Squad C"></textarea>
+          <div class="group-import-preview" id="group-import-preview"></div>
+          <div class="group-import-actions">
+            <button class="btn btn--primary btn--sm" id="group-import-apply" disabled>Appliquer</button>
+            <button class="btn btn--ghost btn--sm" id="group-import-clear">Effacer</button>
+          </div>
+        </div>
+      </details>
     </div>
   `;
 }
@@ -323,41 +625,57 @@ function renderMemberCard(state) {
  * @returns {string} Card HTML
  */
 function renderObjectivesCard(state) {
-  const allSkills = getAllSkillNames(state.members);
+  const allSkills = getCategorizedSkillNames(state.members, state.categories);
   const objectives = state.objectives || {};
 
-  // Compétences avec un objectif défini
   const defined = Object.entries(objectives).filter(([skill]) => allSkills.includes(skill));
-  // Compétences sans objectif
   const available = allSkills.filter(s => !objectives[s]);
 
-  return `
-    <div class="card" id="settings-objectives" style="margin-bottom: var(--space-6);">
-      <div class="card__header">
-        <h3 class="card__title">Objectifs d'équipe</h3>
-        <span class="badge badge--info">${defined.length} défini(s)</span>
-      </div>
-      <div style="padding: 0 var(--space-5) var(--space-4); font-size: var(--font-size-xs); color: var(--color-text-secondary);">
-        Définissez un nombre minimum de Confirmés/Experts par compétence. La progression s'affiche dans le Dashboard.
-      </div>
-      <div class="objectives-settings-list" style="padding: 0 var(--space-5) var(--space-4);">
-        ${defined.map(([skill, obj]) => `
-          <div class="objective-setting-row" data-skill="${escapeHtml(skill)}">
-            <span class="objective-setting-row__name">${escapeHtml(skill)}</span>
-            <label class="objective-setting-row__label">
-              Cible :
-              <select class="form-select objective-target-select" data-skill="${escapeHtml(skill)}" style="width: 80px;">
-                ${[1, 2, 3, 4, 5].map(v => `<option value="${v}" ${(obj.minExperts || 2) === v ? 'selected' : ''}>${v}</option>`).join('')}
-              </select>
-            </label>
-            <button class="btn btn--ghost btn--sm objective-remove-btn" data-skill="${escapeHtml(skill)}" title="Retirer cet objectif">✕</button>
+  const rowsHtml = defined.map(([skill, obj]) => {
+    const target = obj.minExperts || 2;
+    const stats = getSkillStats(state.members, skill);
+    const current = stats.levels[3] + stats.levels[4];
+    const pct = Math.min(Math.round((current / target) * 100), 100);
+    const isMet = current >= target;
+    const barColor = isMet ? 'var(--color-success)' : pct >= 50 ? 'var(--color-warning)' : 'var(--color-danger)';
+    return `
+      <div class="objective-setting-row" data-skill="${escapeHtml(skill)}">
+        <div class="objective-setting-row__main">
+          <span class="objective-setting-row__name">${escapeHtml(skill)}</span>
+          <div class="objective-setting-row__progress">
+            <div class="objective-setting-row__bar">
+              <div class="objective-setting-row__bar-fill" style="width: ${pct}%; background: ${barColor};"></div>
+            </div>
+            <span class="objective-setting-row__status ${isMet ? 'objective-setting-row__status--met' : ''}">${current}/${target}</span>
           </div>
-        `).join('')}
+        </div>
+        <div class="objective-setting-row__controls">
+          <label class="objective-setting-row__label">
+            Cible :
+            <select class="form-select objective-target-select" data-skill="${escapeHtml(skill)}">
+              ${[1, 2, 3, 4, 5].map(v => `<option value="${v}" ${target === v ? 'selected' : ''}>${v}</option>`).join('')}
+            </select>
+          </label>
+          <button class="btn btn--ghost btn--sm objective-remove-btn" data-skill="${escapeHtml(skill)}" title="Retirer cet objectif">✕</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="card settings-card settings-card--objectives" id="settings-objectives">
+      <div class="card__header">
+        <h3 class="card__title"><span class="card__title-icon">🎯</span> Objectifs d'equipe</h3>
+        <span class="badge badge--info">${defined.length} defini(s)</span>
+      </div>
+      <p class="settings-card__description">Definissez un nombre minimum de Confirmes/Experts par competence. La progression s'affiche dans le Dashboard.</p>
+      <div class="objectives-settings-list">
+        ${rowsHtml || '<p class="settings-card__empty">Aucun objectif defini.</p>'}
       </div>
       ${available.length > 0 ? `
-        <div style="padding: 0 var(--space-5) var(--space-5); display: flex; gap: var(--space-2); align-items: center;">
-          <select class="form-select" id="objective-add-skill" style="flex: 1; max-width: 300px;">
-            <option value="">Ajouter une compétence...</option>
+        <div class="objective-add-row">
+          <select class="form-select objective-add-row__select" id="objective-add-skill">
+            <option value="">Ajouter une competence...</option>
             ${available.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}
           </select>
           <button class="btn btn--sm btn--primary" id="objective-add-btn">+ Ajouter</button>
@@ -372,32 +690,24 @@ function renderObjectivesCard(state) {
  */
 function renderThresholdsCard(settings) {
   return `
-    <div class="card" id="settings-thresholds" style="margin-bottom: var(--space-6);">
+    <div class="card settings-card settings-card--thresholds" id="settings-thresholds">
       <div class="card__header">
-        <h3 class="card__title">Seuils & Affichage</h3>
+        <h3 class="card__title"><span class="card__title-icon">⚙️</span> Seuils & Affichage</h3>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6);">
-        <div>
-          <label style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); display: block; margin-bottom: var(--space-1);">
-            Seuil d'alerte critique
-          </label>
-          <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-bottom: var(--space-2);">
-            Nombre minimum de Confirmes/Experts requis.
-          </p>
-          <select class="form-select" id="setting-critical-threshold" style="max-width: 200px;">
+      <div class="settings-thresholds-grid">
+        <div class="settings-field">
+          <label class="settings-field__label">Seuil d'alerte critique</label>
+          <p class="settings-field__hint">Nombre minimum de Confirmes/Experts requis.</p>
+          <select class="form-select settings-field__select" id="setting-critical-threshold">
             ${[1, 2, 3].map(v => `
               <option value="${v}" ${settings.criticalThreshold === v ? 'selected' : ''}>${v} personne${v > 1 ? 's' : ''}</option>
             `).join('')}
           </select>
         </div>
-        <div>
-          <label style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); display: block; margin-bottom: var(--space-1);">
-            Troncature des noms de competence
-          </label>
-          <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-bottom: var(--space-2);">
-            Longueur max. dans les en-tetes de la matrice.
-          </p>
-          <select class="form-select" id="setting-skill-max-length" style="max-width: 200px;">
+        <div class="settings-field">
+          <label class="settings-field__label">Troncature des noms de competence</label>
+          <p class="settings-field__hint">Longueur max. dans les en-tetes de la matrice.</p>
+          <select class="form-select settings-field__select" id="setting-skill-max-length">
             ${[
               { v: 8, l: '8 caracteres' },
               { v: 12, l: '12 caracteres' },
@@ -426,17 +736,15 @@ function renderExportCard(settings) {
   const currentValue = settings.csvDelimiter === '\t' ? 'tab' : settings.csvDelimiter;
 
   return `
-    <div class="card" id="settings-export" style="margin-bottom: var(--space-6);">
+    <div class="card settings-card settings-card--export" id="settings-export">
       <div class="card__header">
-        <h3 class="card__title">Export CSV</h3>
+        <h3 class="card__title"><span class="card__title-icon">📤</span> Export CSV</h3>
       </div>
-      <div>
-        <label style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); display: block; margin-bottom: var(--space-2);">
-          Separateur CSV
-        </label>
-        <div style="display: flex; gap: var(--space-4);">
+      <div class="settings-field">
+        <label class="settings-field__label">Separateur CSV</label>
+        <div class="settings-radio-group">
           ${options.map(opt => `
-            <label style="display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); cursor: pointer;">
+            <label class="settings-radio-group__option">
               <input type="radio" name="csv-delimiter" value="${opt.value}"
                      ${currentValue === opt.value ? 'checked' : ''} />
               ${opt.label}
@@ -479,9 +787,9 @@ function renderApiSourcesCard() {
   ).join('');
 
   return `
-    <div class="card" id="settings-sources" style="margin-bottom: var(--space-6);">
+    <div class="card settings-card settings-card--sources" id="settings-sources">
       <div class="card__header">
-        <h3 class="card__title">Sources externes (API)</h3>
+        <h3 class="card__title"><span class="card__title-icon">🔌</span> Sources externes (API)</h3>
         <span class="badge badge--neutral">${sources.length}</span>
       </div>
       <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-bottom: var(--space-4);">
@@ -545,21 +853,40 @@ function renderApiSourcesCard() {
  */
 function renderBackupCard(hasData) {
   return `
-    <div class="card" id="settings-backup" style="margin-bottom: var(--space-6);">
+    <div class="card settings-card settings-card--backup" id="settings-backup">
       <div class="card__header">
-        <h3 class="card__title">Sauvegarde & Donnees</h3>
+        <h3 class="card__title"><span class="card__title-icon">💾</span> Sauvegarde & Donnees</h3>
       </div>
-      <div style="display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center;">
-        ${hasData ? `
-          <button class="btn btn--secondary" id="settings-export-json">💾 Exporter JSON</button>
-        ` : ''}
-        <label class="btn btn--secondary" style="cursor: pointer;">
-          📁 Importer JSON
-          <input type="file" accept=".json" id="settings-import-json" style="display: none;" />
+      ${hasData ? `
+        <div class="export-formats">
+          <p class="settings-card__description">Choisissez un format d'export. La previsualisation s'affiche avant le telechargement.</p>
+          <div class="export-formats__grid">
+            <button class="export-format-card" id="export-json-btn">
+              <span class="export-format-card__icon">{ }</span>
+              <span class="export-format-card__title">JSON</span>
+              <span class="export-format-card__desc">Backup complet, reimportable</span>
+            </button>
+            <button class="export-format-card" id="export-md-btn">
+              <span class="export-format-card__icon">MD</span>
+              <span class="export-format-card__title">Markdown</span>
+              <span class="export-format-card__desc">Lisible, ideal pour Confluence/Wiki</span>
+            </button>
+            <button class="export-format-card" id="export-xlsx-btn">
+              <span class="export-format-card__icon">XLS</span>
+              <span class="export-format-card__title">Excel</span>
+              <span class="export-format-card__desc">3 onglets : Matrice, Appetences, Analyse</span>
+            </button>
+          </div>
+        </div>
+      ` : ''}
+      <div class="export-formats__footer">
+        <label class="btn btn--secondary settings-backup__import-label">
+          Importer JSON
+          <input type="file" accept=".json" id="settings-import-json" class="settings-backup__file-input" />
         </label>
         ${hasData ? `
-          <div style="flex: 1;"></div>
-          <button class="btn btn--danger" id="settings-reset-btn">🗑 Reinitialiser toutes les donnees</button>
+          <div class="settings-backup__spacer"></div>
+          <button class="btn btn--ghost settings-backup__reset-btn" id="settings-reset-btn">Reinitialiser les donnees</button>
         ` : ''}
       </div>
     </div>
@@ -932,6 +1259,19 @@ function bindSettingsEvents(container) {
     });
   });
 
+  // --- Autocomplete sur appétences et groupes (édition) ---
+  const acGroups = () => getAllGroups(getState().members);
+  const acAppetences = () => getAllAppetences(getState().members);
+  container.querySelectorAll('.member-edit-input[data-field="groups"]').forEach(input => {
+    attachAutocomplete(input, acGroups);
+  });
+  container.querySelectorAll('.member-edit-input[data-field="appetences"]').forEach(input => {
+    attachAutocomplete(input, acAppetences);
+  });
+  // Autocomplete sur le formulaire d'ajout
+  const addGroupsInput = container.querySelector('#member-add-groups');
+  if (addGroupsInput) attachAutocomplete(addGroupsInput, acGroups);
+
   // --- Add member ---
   const memberAddBtn = container.querySelector('#member-add-btn');
   memberAddBtn?.addEventListener('click', () => {
@@ -959,6 +1299,9 @@ function bindSettingsEvents(container) {
     if (e.key === 'Enter') memberAddBtn?.click();
   });
 
+  // --- Groupes ---
+  bindGroupsEvents(container);
+
   // --- Objectifs d'équipe ---
   container.querySelector('#objective-add-btn')?.addEventListener('click', () => {
     const select = container.querySelector('#objective-add-skill');
@@ -967,6 +1310,7 @@ function bindSettingsEvents(container) {
     const state = getState();
     const objectives = { ...state.objectives, [skill]: { minExperts: 2 } };
     updateState({ objectives });
+    syncObjectivesToPb(objectives);
     saveActiveTemplate();
     toastSuccess(`Objectif ajouté pour « ${skill} ».`);
   });
@@ -978,6 +1322,7 @@ function bindSettingsEvents(container) {
       const state = getState();
       const objectives = { ...state.objectives, [skill]: { minExperts: val } };
       updateState({ objectives });
+      syncObjectivesToPb(objectives);
       saveActiveTemplate();
     });
   });
@@ -989,6 +1334,7 @@ function bindSettingsEvents(container) {
       const objectives = { ...state.objectives };
       delete objectives[skill];
       updateState({ objectives });
+      syncObjectivesToPb(objectives);
       saveActiveTemplate();
       toastSuccess(`Objectif retiré pour « ${skill} ».`);
     });
@@ -1017,12 +1363,29 @@ function bindSettingsEvents(container) {
   // --- API Sources ---
   bindApiSourcesEvents(container);
 
-  // --- Backup & Data ---
-  container.querySelector('#settings-export-json')?.addEventListener('click', () => {
+  // --- Backup & Data : Export formats ---
+  container.querySelector('#export-json-btn')?.addEventListener('click', () => {
     const state = getState();
     const json = exportJSON(state);
-    downloadFile(json, 'skills-matrix-backup.json', 'application/json');
-    toastSuccess('Backup JSON exporte.');
+    showExportPreview('JSON', json, 'skills-matrix-backup.json', 'application/json');
+  });
+
+  container.querySelector('#export-md-btn')?.addEventListener('click', () => {
+    const state = getState();
+    const threshold = state.settings?.criticalThreshold ?? 2;
+    const md = exportMarkdown(state.members, state.categories || {}, threshold, state.objectives || {});
+    showExportPreview('Markdown', md, 'skills-matrix.md', 'text/markdown');
+  });
+
+  container.querySelector('#export-xlsx-btn')?.addEventListener('click', () => {
+    try {
+      const state = getState();
+      const threshold = state.settings?.criticalThreshold ?? 2;
+      const blob = exportXLSX(state.members, state.categories || {}, threshold, state.objectives || {});
+      showExportPreview('Excel', null, 'skills-matrix.xlsx', null, blob);
+    } catch (err) {
+      toastError(err.message || 'Erreur lors de la génération XLSX.');
+    }
   });
 
   container.querySelector('#settings-import-json')?.addEventListener('change', async (e) => {
@@ -1106,7 +1469,7 @@ function bindApiSourcesEvents(container) {
       const result = await testConnection(source.url, source.token, source.type);
 
       if (result.success) {
-        setStatus(sourceId, `OK — ${result.summary}`, 'success');
+        setStatus(sourceId, `OK - ${result.summary}`, 'success');
       } else {
         setStatus(sourceId, result.error, 'error');
       }
@@ -1191,7 +1554,257 @@ function bindApiSourcesEvents(container) {
 }
 
 // ============================================================
-// Drag and drop — categories and skills
+// Group management events
+// ============================================================
+
+/**
+ * Bind events for the groups management card.
+ * Handles rename, delete, add, bulk assignment, and paste import.
+ * @param {HTMLElement} container
+ */
+function bindGroupsEvents(container) {
+  // --- Ajouter un groupe ---
+  container.querySelector('#group-add-btn')?.addEventListener('click', () => {
+    const input = container.querySelector('#group-add-name');
+    const name = input?.value.trim();
+    if (!name) return;
+    const groups = getAllGroups(getState().members);
+    if (groups.includes(name)) {
+      toastWarning(`Le groupe « ${name} » existe deja.`);
+      return;
+    }
+    // Creer le groupe en l'ajoutant a un membre fictif? Non : on l'ajoute a aucun membre,
+    // mais on peut avertir que le groupe sera visible une fois affecte
+    toastInfo(`Groupe « ${name} » pret. Affectez-y des membres via l'affectation en masse.`);
+    input.value = '';
+    // Forcer l'ajout dans la UI en mettant a jour un membre temporaire? Non, il faut stocker en referentiel.
+    // Pour l'instant, on re-render apres que l'utilisateur ajoute via bulk
+  });
+  container.querySelector('#group-add-name')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') container.querySelector('#group-add-btn')?.click();
+  });
+
+  // --- Renommer un groupe ---
+  container.querySelectorAll('.group-rename-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('.group-row');
+      const oldName = btn.dataset.group;
+      const nameEl = row.querySelector('.group-row__name');
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = oldName;
+      input.className = 'form-input';
+      input.style.cssText = 'font-size: var(--font-size-sm); padding: 2px 6px; height: 24px; min-width: 80px; max-width: 200px;';
+      nameEl.replaceWith(input);
+      input.select();
+
+      let committed = false;
+      const commit = () => {
+        if (committed) return;
+        committed = true;
+        const newName = input.value.trim();
+        if (!newName || newName === oldName) {
+          renderSettingsView(container);
+          return;
+        }
+        const groups = getAllGroups(getState().members);
+        if (groups.includes(newName)) {
+          toastError(`Le groupe « ${newName} » existe deja.`);
+          renderSettingsView(container);
+          return;
+        }
+        renameGroup(oldName, newName);
+        saveActiveTemplate();
+        toastSuccess(`Groupe renomme en « ${newName} ».`);
+      };
+
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { committed = true; renderSettingsView(container); }
+      });
+    });
+  });
+
+  // --- Supprimer un groupe ---
+  container.querySelectorAll('.group-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const groupName = btn.dataset.group;
+      const state = getState();
+      const count = state.members.filter(m => (m.groups || []).includes(groupName)).length;
+      const confirmed = await confirm(
+        'Supprimer le groupe',
+        `Supprimer « ${groupName} » ? Il sera retire de ${count} membre(s).`
+      );
+      if (!confirmed) return;
+      removeGroup(groupName);
+      saveActiveTemplate();
+      toastSuccess(`Groupe « ${groupName} » supprime.`);
+    });
+  });
+
+  // --- Bulk : compteur ---
+  const updateBulkCount = () => {
+    const checks = container.querySelectorAll('.bulk-member-check:checked');
+    const countEl = container.querySelector('#bulk-count');
+    if (countEl) countEl.textContent = `${checks.length} selectionne(s)`;
+  };
+  container.querySelectorAll('.bulk-member-check').forEach(cb => {
+    cb.addEventListener('change', updateBulkCount);
+  });
+  container.querySelector('#bulk-select-all')?.addEventListener('click', () => {
+    container.querySelectorAll('.bulk-member-check').forEach(cb => { cb.checked = true; });
+    updateBulkCount();
+  });
+  container.querySelector('#bulk-select-none')?.addEventListener('click', () => {
+    container.querySelectorAll('.bulk-member-check').forEach(cb => { cb.checked = false; });
+    updateBulkCount();
+  });
+
+  // --- Bulk : nouveau groupe toggle ---
+  container.querySelector('#bulk-group-select')?.addEventListener('change', (e) => {
+    const newInput = container.querySelector('#bulk-new-group-name');
+    if (newInput) newInput.style.display = e.target.value === '__new__' ? '' : 'none';
+  });
+
+  // --- Bulk : ajouter au groupe ---
+  container.querySelector('#bulk-add-to-group')?.addEventListener('click', () => {
+    const select = container.querySelector('#bulk-group-select');
+    let groupName = select?.value;
+    if (groupName === '__new__') {
+      groupName = container.querySelector('#bulk-new-group-name')?.value.trim();
+      if (!groupName) { toastError('Entrez un nom de groupe.'); return; }
+    }
+    if (!groupName) { toastWarning('Choisissez un groupe.'); return; }
+
+    const ids = [...container.querySelectorAll('.bulk-member-check:checked')].map(cb => cb.dataset.memberId);
+    if (ids.length === 0) { toastWarning('Selectionnez au moins un membre.'); return; }
+
+    const state = getState();
+    let changed = 0;
+    for (const m of state.members) {
+      if (ids.includes(m.id)) {
+        if (!m.groups) m.groups = [];
+        if (!m.groups.includes(groupName)) {
+          m.groups.push(groupName);
+          changed++;
+        }
+      }
+    }
+    if (changed === 0) { toastInfo('Tous les membres selectionnes sont deja dans ce groupe.'); return; }
+    replaceMembers(state.members);
+    saveActiveTemplate();
+    toastSuccess(`${changed} membre(s) ajoute(s) au groupe « ${groupName} ».`);
+  });
+
+  // --- Bulk : retirer du groupe ---
+  container.querySelector('#bulk-remove-from-group')?.addEventListener('click', () => {
+    const select = container.querySelector('#bulk-group-select');
+    let groupName = select?.value;
+    if (!groupName || groupName === '__new__') { toastWarning('Choisissez un groupe existant.'); return; }
+
+    const ids = [...container.querySelectorAll('.bulk-member-check:checked')].map(cb => cb.dataset.memberId);
+    if (ids.length === 0) { toastWarning('Selectionnez au moins un membre.'); return; }
+
+    const state = getState();
+    let changed = 0;
+    for (const m of state.members) {
+      if (ids.includes(m.id) && Array.isArray(m.groups)) {
+        const idx = m.groups.indexOf(groupName);
+        if (idx !== -1) { m.groups.splice(idx, 1); changed++; }
+      }
+    }
+    if (changed === 0) { toastInfo('Aucun des membres selectionnes n\'est dans ce groupe.'); return; }
+    replaceMembers(state.members);
+    saveActiveTemplate();
+    toastSuccess(`${changed} membre(s) retire(s) du groupe « ${groupName} ».`);
+  });
+
+  // --- Import coller : preview en temps reel ---
+  const textarea = container.querySelector('#group-import-textarea');
+  const previewEl = container.querySelector('#group-import-preview');
+  const applyBtn = container.querySelector('#group-import-apply');
+
+  let parsedImport = [];
+
+  const parseGroupImport = (text) => {
+    if (!text.trim()) return [];
+    const lines = text.trim().split('\n');
+    const result = [];
+    for (const line of lines) {
+      const sep = line.includes(';') ? ';' : line.includes('\t') ? '\t' : null;
+      if (!sep) { result.push({ raw: line, error: 'Format invalide (separateur ; ou tab attendu)' }); continue; }
+      const parts = line.split(sep).map(p => p.trim());
+      if (parts.length < 2 || !parts[0]) { result.push({ raw: line, error: 'Nom de membre manquant' }); continue; }
+      const memberName = parts[0];
+      const groups = parts.slice(1).join(',').split(',').map(g => g.trim()).filter(Boolean);
+      if (groups.length === 0) { result.push({ raw: line, error: 'Aucun groupe specifie' }); continue; }
+      // Matcher le membre par nom (insensible a la casse)
+      const state = getState();
+      const member = state.members.find(m => m.name.toLowerCase() === memberName.toLowerCase());
+      result.push({ raw: line, memberName, groups, memberId: member?.id || null, matched: !!member });
+    }
+    return result;
+  };
+
+  const renderImportPreview = () => {
+    if (!previewEl || !textarea) return;
+    parsedImport = parseGroupImport(textarea.value);
+    if (parsedImport.length === 0) {
+      previewEl.innerHTML = '';
+      if (applyBtn) applyBtn.disabled = true;
+      return;
+    }
+    const hasErrors = parsedImport.some(p => p.error || !p.matched);
+    const valid = parsedImport.filter(p => !p.error && p.matched);
+    previewEl.innerHTML = `
+      <div class="group-import-preview__summary">
+        <span class="badge badge--info">${valid.length} valide(s)</span>
+        ${hasErrors ? `<span class="badge badge--warning">${parsedImport.length - valid.length} probleme(s)</span>` : ''}
+      </div>
+      <div class="group-import-preview__rows">
+        ${parsedImport.map(p => {
+          if (p.error) return `<div class="group-import-preview__row group-import-preview__row--error"><span>${escapeHtml(p.raw)}</span><span class="group-import-preview__msg">${escapeHtml(p.error)}</span></div>`;
+          if (!p.matched) return `<div class="group-import-preview__row group-import-preview__row--warn"><span>${escapeHtml(p.memberName)}</span><span class="group-import-preview__msg">Membre non trouve</span></div>`;
+          return `<div class="group-import-preview__row group-import-preview__row--ok"><span>${escapeHtml(p.memberName)}</span><span>${p.groups.map(g => `<span class="badge badge--neutral" style="font-size: 10px;">${escapeHtml(g)}</span>`).join(' ')}</span></div>`;
+        }).join('')}
+      </div>
+    `;
+    if (applyBtn) applyBtn.disabled = valid.length === 0;
+  };
+
+  textarea?.addEventListener('input', debounce(renderImportPreview, 200));
+
+  // --- Import coller : appliquer ---
+  applyBtn?.addEventListener('click', () => {
+    const valid = parsedImport.filter(p => !p.error && p.matched);
+    if (valid.length === 0) return;
+    const state = getState();
+    for (const entry of valid) {
+      const member = state.members.find(m => m.id === entry.memberId);
+      if (!member) continue;
+      if (!member.groups) member.groups = [];
+      for (const g of entry.groups) {
+        if (!member.groups.includes(g)) member.groups.push(g);
+      }
+    }
+    replaceMembers(state.members);
+    saveActiveTemplate();
+    toastSuccess(`${valid.length} affectation(s) appliquee(s).`);
+  });
+
+  // --- Import coller : effacer ---
+  container.querySelector('#group-import-clear')?.addEventListener('click', () => {
+    if (textarea) textarea.value = '';
+    if (previewEl) previewEl.innerHTML = '';
+    if (applyBtn) applyBtn.disabled = true;
+    parsedImport = [];
+  });
+}
+
+// ============================================================
+// Drag and drop - categories and skills
 // ============================================================
 
 /**

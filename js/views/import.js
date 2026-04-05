@@ -226,7 +226,7 @@ function renderCustomTemplatesHTML(templates) {
             </div>
           </div>
           <p style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 0; line-height: 1.4;">
-            ${escapeHtml(tpl.description)}${tpl.members ? ` — ${tpl.members.length} membres` : ''}
+            ${escapeHtml(tpl.description)}${tpl.members ? ` - ${tpl.members.length} membres` : ''}
           </p>
         </div>
       `).join('')}
@@ -246,7 +246,7 @@ async function refreshTemplates(container) {
   let html = '';
   if (!fromServer && templates.length > 0) {
     html += `<div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-3); background: var(--color-warning-50, rgba(234,179,8,.1)); border: 1px solid var(--color-warning-200, rgba(234,179,8,.3)); border-radius: var(--radius-md); font-size: var(--font-size-xs); color: var(--color-text-secondary);">
-      <span>⚠</span> PocketBase non disponible — affichage depuis le stockage local. Lancez <code style="background: var(--color-bg-tertiary); padding: 1px 4px; border-radius: 3px;">npm run pm2</code> pour la persistance PocketBase.
+      <span>⚠</span> PocketBase non disponible - affichage depuis le stockage local. Lancez <code style="background: var(--color-bg-tertiary); padding: 1px 4px; border-radius: 3px;">npm run pm2</code> pour la persistance PocketBase.
     </div>`;
   }
   if (!fromServer && templates.length === 0) {
@@ -411,7 +411,7 @@ function bindImportEvents(container) {
     if (result.fromServer) {
       toastSuccess(`Équipe « ${formData.title} » créée dans PocketBase.`);
     } else {
-      toastWarning(`PocketBase non disponible — équipe « ${formData.title} » sauvegardée en local. Lancez npm run pm2 pour la persistance PocketBase.`);
+      toastWarning(`PocketBase non disponible - équipe « ${formData.title} » sauvegardée en local. Lancez npm run pm2 pour la persistance PocketBase.`);
     }
     refreshTemplates(container);
   });
@@ -430,7 +430,7 @@ function bindImportEvents(container) {
         if (result.fromServer) {
           toastSuccess('Template importé (fichier JSON).');
         } else {
-          toastWarning('PocketBase non disponible — template importé en local (localStorage).');
+          toastWarning('PocketBase non disponible - template importé en local (localStorage).');
         }
         refreshTemplates(container);
       } else {

@@ -6,7 +6,7 @@
  */
 
 import { getState, updateState, on, isShareMode, getShareMemberName } from '../state.js';
-import { toastSuccess, toastInfo, toastError } from './toast.js';
+import { toastInfo, toastError } from './toast.js';
 import { saveSharedSkills } from '../services/share.js';
 import { escapeHtml, getInitials } from '../utils/helpers.js';
 
@@ -15,6 +15,9 @@ let shareSaveTimer = null;
 
 /** @type {boolean} Auto-save listener deja initialise */
 let autoSaveSetup = false;
+
+/** @type {Map<string, {memberId: string, skillName: string}>} Cellules en attente de sauvegarde */
+const pendingCells = new Map();
 
 /**
  * Show the member selection modal.
@@ -111,32 +114,73 @@ export function renderShareMemberBanner(container) {
 }
 
 /**
+ * Applique une classe de statut de synchronisation sur une cellule skill.
+ * @param {string} memberId
+ * @param {string} skillName
+ * @param {'saving'|'saved'|'save-error'|null} status
+ */
+function setCellSyncStatus(memberId, skillName, status) {
+  for (const cell of document.querySelectorAll(`.skill-cell[data-member-id="${memberId}"]`)) {
+    if (cell.dataset.skill === skillName) {
+      cell.classList.remove('skill-cell--saving', 'skill-cell--saved', 'skill-cell--save-error');
+      if (status) cell.classList.add(`skill-cell--${status}`);
+      return;
+    }
+  }
+}
+
+/**
  * Initialize the share auto-save listeners.
- * Debounces saves to the server after skill or category edits.
+ * Envoie uniquement les competences modifiees (delta) et affiche
+ * un indicateur visuel par cellule (saving / saved / error).
  */
 export function initShareAutoSave() {
   if (autoSaveSetup) return;
   autoSaveSetup = true;
 
-  on('skill:updated', () => {
+  // Re-appliquer les indicateurs « saving » apres chaque re-render
+  on('state:changed', () => {
+    if (pendingCells.size === 0) return;
+    requestAnimationFrame(() => {
+      for (const { memberId, skillName } of pendingCells.values()) {
+        setCellSyncStatus(memberId, skillName, 'saving');
+      }
+    });
+  });
+
+  on('skill:updated', ({ memberId, skillName }) => {
     if (!isShareMode()) return;
     const state = getState();
     const memberName = state.shareMemberName;
     const token = state.shareToken;
     if (!memberName || !token) return;
 
-    const member = state.members.find(m => m.name === memberName);
-    if (!member) return;
+    // Enregistrer la cellule comme « en attente »
+    pendingCells.set(`${memberId}:${skillName}`, { memberId, skillName });
+    setCellSyncStatus(memberId, skillName, 'saving');
 
     if (shareSaveTimer) clearTimeout(shareSaveTimer);
     shareSaveTimer = setTimeout(async () => {
-      const ok = await saveSharedSkills(token, memberName, member.skills);
-      if (ok) {
-        toastSuccess('Compétences sauvegardées.');
-      } else {
-        toastError('Erreur lors de la sauvegarde — réessayez.');
+      // Relire le state au moment de l'envoi (pas au moment de l'event)
+      const freshState = getState();
+      const member = freshState.members.find(m => m.name === memberName);
+      if (!member) return;
+
+      // Construire le delta : uniquement les competences modifiees
+      const cellsSnapshot = [...pendingCells.values()];
+      const skillsDelta = {};
+      for (const { skillName: sn } of cellsSnapshot) {
+        if (member.skills[sn]) skillsDelta[sn] = member.skills[sn];
+      }
+      pendingCells.clear();
+
+      const ok = await saveSharedSkills(token, memberName, skillsDelta);
+      for (const { memberId: mId, skillName: sn } of cellsSnapshot) {
+        setCellSyncStatus(mId, sn, ok ? 'saved' : 'save-error');
+      }
+      if (!ok) {
+        toastError('Erreur lors de la sauvegarde - réessayez.');
       }
     }, 1500);
   });
-
 }

@@ -283,6 +283,173 @@ export function exportDetailedCSV(members, categories = {}, delimiter = ';', thr
 }
 
 /**
+ * Export members data as a Markdown document.
+ * Sections : synthèse, matrice, compétences critiques, objectifs, priorités de formation, catégories.
+ * @param {Object[]} members
+ * @param {Object} [categories={}]
+ * @param {number} [threshold=2]
+ * @param {Object} [objectives={}]
+ * @returns {string} Markdown content
+ */
+export function exportMarkdown(members, categories = {}, threshold = 2, objectives = {}) {
+  if (members.length === 0) return '# Skills Matrix\n\nAucune donnée.';
+
+  const skills = getOrderedSkills(members, categories);
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+  const lines = [];
+  const levelIcons = ['⬜', '🟥', '🟧', '🟦', '🟩'];
+
+  lines.push('# 📊 Skills Matrix - Export');
+  lines.push('');
+  lines.push(`> Exporté le ${dateStr} - ${members.length} membres, ${skills.length} compétences`);
+  lines.push('');
+
+  // ── Synthèse ──
+  const criticals = skills.filter(s => isSkillCritical(members, s, threshold));
+  lines.push('## 📋 Synthèse');
+  lines.push('');
+  lines.push(`| Indicateur | Valeur |`);
+  lines.push(`|------------|--------|`);
+  lines.push(`| Membres | ${members.length} |`);
+  lines.push(`| Compétences | ${skills.length} |`);
+  lines.push(`| Compétences critiques | ${criticals.length} |`);
+  const objEntries = Object.entries(objectives).filter(([s]) => skills.includes(s));
+  const objMet = objEntries.filter(([s, o]) => {
+    const st = getSkillStats(members, s);
+    return (st.levels[3] + st.levels[4]) >= (o.minExperts || 2);
+  });
+  if (objEntries.length > 0) {
+    lines.push(`| Objectifs d'équipe | ${objMet.length}/${objEntries.length} atteints |`);
+  }
+  lines.push('');
+
+  // ── Matrice ──
+  lines.push('## 📊 Matrice des compétences');
+  lines.push('');
+  const header = `| Membre | Rôle | ${skills.join(' | ')} |`;
+  const sep = `|--------|------|${skills.map(() => ':---:').join('|')}|`;
+  lines.push(header);
+  lines.push(sep);
+  for (const m of members) {
+    const cells = skills.map(s => {
+      const lvl = m.skills[s]?.level ?? 0;
+      return levelIcons[lvl];
+    });
+    lines.push(`| ${m.name} | ${m.role || '-'} | ${cells.join(' | ')} |`);
+  }
+  lines.push('');
+  lines.push('> ⬜ Aucun · 🟥 Débutant · 🟧 Intermédiaire · 🟦 Confirmé · 🟩 Expert');
+  lines.push('');
+
+  // ── Objectifs d'équipe ──
+  if (objEntries.length > 0) {
+    lines.push('## 🎯 Objectifs d\'équipe');
+    lines.push('');
+    lines.push('| Compétence | Cible | Actuel | Statut |');
+    lines.push('|------------|:-----:|:------:|--------|');
+    for (const [skill, obj] of objEntries) {
+      const target = obj.minExperts || 2;
+      const stats = getSkillStats(members, skill);
+      const current = stats.levels[3] + stats.levels[4];
+      const met = current >= target;
+      lines.push(`| ${skill} | ${target} Confirmé+ | ${current} | ${met ? '✅ Atteint' : '⚠️ ' + Math.round((current / target) * 100) + '%'} |`);
+    }
+    lines.push('');
+  }
+
+  // ── Compétences critiques ──
+  if (criticals.length > 0) {
+    lines.push('## 🚨 Compétences critiques');
+    lines.push('');
+    lines.push('| Compétence | Confirmé+ | Niv. moyen | Formateurs internes | À former (motivés) |');
+    lines.push('|------------|:---------:|:----------:|--------------------|--------------------|');
+    for (const s of criticals) {
+      const stats = getSkillStats(members, s);
+      const confirmed = stats.levels[3] + stats.levels[4];
+      const trainers = members.filter(m => (m.skills[s]?.level ?? 0) >= 3).map(m => m.name);
+      const learners = members.filter(m => {
+        const e = m.skills[s];
+        return e && e.level < 3 && (e.appetence ?? 0) >= 2;
+      }).map(m => m.name);
+      lines.push(`| **${s}** | ${confirmed}/${threshold} | ${stats.avgLevel.toFixed(1)} | ${trainers.join(', ') || '-'} | ${learners.join(', ') || '-'} |`);
+    }
+    lines.push('');
+  }
+
+  // ── Priorités de formation ──
+  const trainingPriorities = computeTrainingPrioritiesForExport(members, skills, threshold);
+  if (trainingPriorities.length > 0) {
+    lines.push('## 📚 Priorités de formation');
+    lines.push('');
+    lines.push('| # | Compétence | Urgence | Couvert | Formateurs | Candidats motivés |');
+    lines.push('|:-:|------------|---------|:-------:|------------|-------------------|');
+    trainingPriorities.forEach((p, i) => {
+      const urgLabel = p.urgency === 'high' ? '🔴 Haute' : '🟠 Moyenne';
+      lines.push(`| ${i + 1} | **${p.skill}** | ${urgLabel} | ${p.confirmedOrExpert}/${threshold} | ${p.trainers.join(', ') || '-'} | ${p.learners.join(', ') || '-'} |`);
+    });
+    lines.push('');
+  }
+
+  // ── Par catégorie ──
+  const catEntries = Object.entries(categories).filter(([, s]) => s.length > 0);
+  if (catEntries.length > 0) {
+    lines.push('## 🏷️ Par catégorie');
+    lines.push('');
+    for (const [catName, catSkills] of catEntries) {
+      lines.push(`### ${catName}`);
+      lines.push('');
+      for (const s of catSkills) {
+        if (!skills.includes(s)) continue;
+        const stats = getSkillStats(members, s);
+        const crit = isSkillCritical(members, s, threshold);
+        lines.push(`- ${crit ? '⚠️' : '✅'} ${s} - moy. ${stats.avgLevel.toFixed(1)}, couverture ${stats.coverage.toFixed(0)}%`);
+      }
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// exportXLSX déplacé dans exporter-xlsx.js (styles, formules, légendes)
+
+/**
+ * Calcule les priorités de formation pour l'export (même algo que le dashboard).
+ * @param {Object[]} members
+ * @param {string[]} skills
+ * @param {number} threshold
+ * @returns {Object[]}
+ */
+export function computeTrainingPrioritiesForExport(members, skills, threshold) {
+  const priorities = [];
+  for (const skill of skills) {
+    const stats = getSkillStats(members, skill);
+    const confirmedOrExpert = stats.levels[3] + stats.levels[4];
+    if (confirmedOrExpert >= threshold) continue;
+    const learners = members.filter(m => {
+      const e = m.skills[skill];
+      return e && e.level < 3 && (e.appetence ?? 0) >= 2;
+    });
+    const trainers = members.filter(m => (m.skills[skill]?.level ?? 0) >= 3);
+    priorities.push({
+      skill,
+      urgency: confirmedOrExpert === 0 ? 'high' : 'medium',
+      confirmedOrExpert,
+      learners: learners.map(c => c.name),
+      trainers: trainers.map(t => t.name),
+      avgLevel: stats.avgLevel,
+    });
+  }
+  priorities.sort((a, b) => {
+    if (a.urgency === 'high' && b.urgency !== 'high') return -1;
+    if (b.urgency === 'high' && a.urgency !== 'high') return 1;
+    return b.learners.length - a.learners.length;
+  });
+  return priorities.slice(0, 15);
+}
+
+/**
  * Export the full application state as a JSON string.
  * @param {Object} state - Application state
  * @returns {string} JSON string
@@ -315,7 +482,7 @@ export function parseJSON(jsonString) {
  * @param {Object} categories - Categories map
  * @returns {string[]} Ordered skill names
  */
-function getOrderedSkills(members, categories) {
+export function getOrderedSkills(members, categories) {
   const allSkills = getAllSkillNames(members);
 
   if (Object.keys(categories).length === 0) return allSkills;
@@ -330,11 +497,6 @@ function getOrderedSkills(members, categories) {
         used.add(name);
       }
     }
-  }
-
-  // Append any uncategorized skills
-  for (const name of allSkills) {
-    if (!used.has(name)) ordered.push(name);
   }
 
   return ordered;

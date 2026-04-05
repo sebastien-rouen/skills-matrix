@@ -5,7 +5,7 @@
  */
 
 import { getState } from '../state.js';
-import { getAllSkillNames } from '../models/data.js';
+import { getCategorizedSkillNames } from '../models/data.js';
 import { escapeHtml, getInitials, getSkillLabel } from '../utils/helpers.js';
 import { navigateTo } from './sidebar.js';
 
@@ -185,7 +185,7 @@ function renderResults(query, container) {
     }
 
     // Compétences correspondantes
-    const allSkills = getAllSkillNames(state.members);
+    const allSkills = getCategorizedSkillNames(state.members, state.categories);
     for (const skill of allSkills) {
       if (skill.toLowerCase().includes(q)) {
         // Calcul rapide du meilleur niveau

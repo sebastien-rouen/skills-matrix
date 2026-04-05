@@ -104,6 +104,16 @@ export async function removeMembre(id) {
 }
 
 /**
+ * Met a jour les objectifs d'equipe dans PocketBase.
+ * @param {string} equipeId - ID PocketBase de l'equipe
+ * @param {Object} objectives - Map { skillName: { minExperts: number } }
+ * @returns {Promise<Object>}
+ */
+export async function updateObjectives(equipeId, objectives) {
+    return getPb().collection('skills_equipes').update(equipeId, { objectives });
+}
+
+/**
  * Génère un code équipe valide depuis un nom.
  * @param {string} name
  * @returns {string} Slug kebab-case

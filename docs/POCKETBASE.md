@@ -1,4 +1,4 @@
-# PocketBase — Guide rapide
+# PocketBase - Guide rapide
 
 PocketBase est la base de données embarquée de Skills Matrix.
 Elle tourne sur le **port 8140** et est gérée par PM2 (`skills-matrix-pb`).
@@ -54,7 +54,7 @@ npm run pm2:stop
 # Supprimer les données (ATTENTION : irréversible)
 rm -rf bdd/pb_data
 
-# Relancer — PocketBase recrée tout depuis les migrations
+# Relancer - PocketBase recrée tout depuis les migrations
 npm run pm2
 ```
 

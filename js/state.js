@@ -150,6 +150,7 @@ export async function initFromPocketBase(equipeCode) {
         equipeId: equipe.id,
         equipeCode,
         competenceMap,
+        objectives: equipe.objectives || {},
     };
     save(state);
     emit('state:initialized', state);
@@ -282,7 +283,7 @@ export function updateSkill(memberId, skillName, skillEntry) {
   const member = current.members.find(m => m.id === memberId);
   if (!member) return;
 
-  // 1. Mise à jour locale immédiate (optimiste — pas d'attente réseau)
+  // 1. Mise à jour locale immédiate (optimiste - pas d'attente réseau)
   member.skills[skillName] = { ...skillEntry };
   member.lastUpdated = new Date().toISOString();
   setState(current);
@@ -341,6 +342,38 @@ export function renameSkill(oldName, newName) {
   setState(current);
   emit('skill:renamed', { oldName, newName });
   emit('categories:updated', current.categories);
+}
+
+/**
+ * Rename a group across all members.
+ * @param {string} oldName - Current group name
+ * @param {string} newName - New group name
+ */
+export function renameGroup(oldName, newName) {
+  const current = getState();
+  for (const member of current.members) {
+    if (Array.isArray(member.groups)) {
+      const idx = member.groups.indexOf(oldName);
+      if (idx !== -1) member.groups[idx] = newName;
+    }
+  }
+  setState(current);
+  emit('group:renamed', { oldName, newName });
+}
+
+/**
+ * Remove a group from all members.
+ * @param {string} groupName - Group to remove
+ */
+export function removeGroup(groupName) {
+  const current = getState();
+  for (const member of current.members) {
+    if (Array.isArray(member.groups)) {
+      member.groups = member.groups.filter(g => g !== groupName);
+    }
+  }
+  setState(current);
+  emit('group:removed', groupName);
 }
 
 /**
@@ -412,6 +445,36 @@ export function isEquipeMode() {
  */
 export function getEquipeCode() {
   return state.equipeCode || null;
+}
+
+/**
+ * Toggle a skill in the pinned list.
+ * @param {string} skillName
+ */
+export function togglePinnedSkill(skillName) {
+  const current = getState();
+  const pinned = current.pinnedSkills || [];
+  const idx = pinned.indexOf(skillName);
+  if (idx === -1) pinned.push(skillName);
+  else pinned.splice(idx, 1);
+  current.pinnedSkills = pinned;
+  setState(current);
+  emit('pins:changed', { pinnedSkills: pinned });
+}
+
+/**
+ * Toggle a member in the pinned list.
+ * @param {string} memberId
+ */
+export function togglePinnedMember(memberId) {
+  const current = getState();
+  const pinned = current.pinnedMembers || [];
+  const idx = pinned.indexOf(memberId);
+  if (idx === -1) pinned.push(memberId);
+  else pinned.splice(idx, 1);
+  current.pinnedMembers = pinned;
+  setState(current);
+  emit('pins:changed', { pinnedMembers: pinned });
 }
 
 /**

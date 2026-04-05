@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# start.sh — Skills Matrix : démarre PocketBase + le serveur web
+# start.sh - Skills Matrix : démarre PocketBase + le serveur web
 #
 # Usage :
 #   ./start.sh               # ports par défaut (PB=8140, web=5500)
